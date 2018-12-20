@@ -18,6 +18,7 @@
 - indexing memories, tables, globals should be in u64
 
 ### PROCESS ADDRESS SPACE (LINUX x86-64 EXAMPLE)
+```
 +++++++++++++++++++++++++++
 |         STACK
 +++++++++++++++++++++++++++
@@ -63,6 +64,7 @@
 |        IMPORTS
 +++++++++++++++++++++++++++
 ...
+```
 
 ### NOTES
 - The instantiate function is what sepeartes the different backends
@@ -207,6 +209,7 @@ PARSING
 
 ### LEB128
 #### UNSIGNED
+```
 MSB ------------------ LSB
 00001001 10000111 01100101  In raw binary
  0100110  0001110  1100101  Padded to a multiple of 7 bits
@@ -235,8 +238,9 @@ Or the value with the previous result
 And so on. Basically you shift by a multiple of 7
 
 if byte's msb is unset, you can break the loop
-
+```
 #### SIGNED
+```
 MSB ------------------ LSB
 00000110 01111000 10011011  In raw two's complement binary
  1011001  1110001  0011011  Sign extended to a multiple of 7 bits
@@ -271,7 +275,7 @@ Using the known size of the encoding
 result &= !(0xff_ff_ff_ff << size)
 
 if byte's msb is unset, you can break the loop
-
+```
 
 ### WASM
 ##### PREAMBLE
