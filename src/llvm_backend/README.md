@@ -1,4 +1,5 @@
 
+# WASMER LLVM
 ### NOT CURRENTLY SUPPORTED
 - wasm64
 - Multiple wasm instances per process. Easy to refactor.
@@ -170,21 +171,23 @@ enum ImportValue {
 ```
 
 ### REFACTOR AFTER PROTOTYPE
-- Use namespaces
 - Restructure project
+    - errors
+        - error.rs
+            * wasmer::error::Error
     - parser
         - parser.rs
-            * Parser
+            * wasmer::wasm::Parser
     - semantics
         - validate.rs
-            * validate
+            * wasmer::wasm::validate
     - jit
         - module.rs
-            * Module
+            * wasmer::jit::Module
         - instance.rs
-            * Instance
+            * wasmer::jit::Instance
         - memory
-            * Memory
+            * wasmer::jit::Memory
         -
 
 
@@ -200,15 +203,8 @@ enum ImportValue {
 ### STRATEGY
 - Single-pass parsing and codegen from wasm to LLVM IR
 
-### NOTES
-PARSING
-    - LEB
-    - varuint1, varuint7, and varuint32
-    - varint7, varint32 and varint64
-    - opcode encoded in single byte
-    - types are distinguished by a negative varint7 (value_type, block_type, elem_type, func_type)
-
-### LEB128
+# ENCODING
+## LEB128
 #### UNSIGNED
 ```
 MSB ------------------ LSB
@@ -269,17 +265,22 @@ Or the value with the previous result
 
 And so on. Basically you shift by a multiple of 7
 
-Decoding a signed has an extra twist, we need to shave off whatever sign bit was added to it
+Decoding a signed LEB128 encoding has an extra twist, we need to extend the sign bit
 
-Using the known size of the encoding
+If the value is signed, then the msb is set
 
-result &= !(0xff_ff_ff_ff << size)
+if result & 0x0100_0000 == 0x0100_0000 {
+    result |= !(0x1 << encoding_size)
+}
 
 if byte's msb is unset, you can break the loop
 ```
 
-### WASM
-##### PREAMBLE
-magic number - unint32
-version - uint32
-##### PREAMBLE
+
+## PREAMBLE
+| Sections        | Storage  |
+| ------------- |:-------------:|
+| magic number | uint32 |
+| version | uint32  |
+
+
