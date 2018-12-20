@@ -32,3 +32,5 @@ pub mod sighandler;
 mod spectests;
 pub mod update;
 pub mod webassembly;
+#[cfg(test)]
+pub mod llvm_backend;

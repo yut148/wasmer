@@ -246,3 +246,187 @@ impl <'a> Parser<'a> {
 
 // pub fn compile(source: Vec<u8>) -> Module {
 // }
+
+#[cfg(test)]
+mod parser_tests {
+    use super::Parser;
+    use super::Error;
+
+    #[test]
+    fn eat_byte_can_consume_next_byte_if_available() {
+        let code = vec![0x6d];
+        let mut parser = Parser::new(&code);
+        let result = parser.eat_byte().unwrap();
+        assert_eq!(result, 0x6d);
+    }
+
+    #[test]
+    fn eat_byte_can_consume_just_the_next_byte_if_available() {
+        let code = vec![0x01, 0x00];
+        let mut parser = Parser::new(&code);
+        let result = parser.eat_byte().unwrap();
+        assert_eq!(result, 0x1);
+    }
+
+    #[test]
+    fn eat_byte_can_consume_just_the_next_byte_if_available_2() {
+        let code = vec![0x01, 0x5f];
+        let mut parser = Parser::new(&code);
+        // Consume first byte.
+        let result = parser.eat_byte();
+        // Then consume the next byte.
+        let result = parser.eat_byte().unwrap();
+        assert_eq!(result, 0x5f);
+    }
+
+    #[test]
+    fn eat_byte_cannot_consume_next_byte_if_not_available() {
+        let code = vec![];
+        let mut parser = Parser::new(&code);
+        let result = parser.eat_byte();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn eat_bytes_can_consume_next_specified_bytes_if_available() {
+        let code = vec![0x00, 0x61, 0x73, 0x6d];
+        let mut parser = Parser::new(&code);
+        let result = parser.eat_bytes(4).unwrap();
+        assert_eq!(result, &[0x00, 0x61, 0x73, 0x6d]);
+    }
+
+    #[test]
+    fn eat_bytes_can_consume_next_specified_bytes_if_available_2() {
+        let code = vec![0x00, 0x61, 0x73, 0x6d, 0x1];
+        let mut parser = Parser::new(&code);
+        let result = parser.eat_bytes(5).unwrap();
+        assert_eq!(result, &[0x00, 0x61, 0x73, 0x6d, 0x1]);
+    }
+
+    #[test]
+    fn eat_bytes_can_consume_next_specified_bytes_if_available_3() {
+        let code = vec![0x01, 0x10, 0x73, 0x6d, 0x09, 0xff, 0x5e];
+        let mut parser = Parser::new(&code);
+        // Consume 4 bytes first.
+        let result = parser.eat_bytes(4);
+        // Then consume the next 3 bytes.
+        let result = parser.eat_bytes(3).unwrap();
+        assert_eq!(result, &[0x09, 0xff, 0x5e]);
+    }
+
+    #[test]
+    fn eat_bytes_can_consume_just_the_next_specified_bytes_if_available() {
+        let code = vec![0x01, 0x00, 0x73, 0x00, 0x1];
+        let mut parser = Parser::new(&code);
+        let result = parser.eat_bytes(1).unwrap();
+        assert_eq!(result, &[0x1]);
+    }
+
+    #[test]
+    fn eat_bytes_cannot_consume_next_specified_bytes_if_not_available() {
+        let code = vec![0x01, 0x00, 0x00];
+        let mut parser = Parser::new(&code);
+        let result = parser.eat_bytes(4);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn eat_bytes_cannot_consume_next_specified_bytes_if_not_available_2() {
+        let code = vec![0x01, 0x10, 0x73, 0x6d, 0x09, 0xff, 0x5e];
+        let mut parser = Parser::new(&code);
+        // Consume 5 bytes first.
+        let result = parser.eat_bytes(5);
+        // Then consume the next 3 bytes.
+        let result = parser.eat_bytes(3);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn uint32_can_consume_next_4_bytes_if_available() {
+        let code = vec![0x00, 0x61, 0x73, 0x6d];
+        let mut parser = Parser::new(&code);
+        let result = parser.uint32().unwrap();
+        assert_eq!(result, 0x6d736100);
+    }
+
+    #[test]
+    fn uint32_can_consume_just_the_next_4_bytes_if_available() {
+        let code = vec![0x01, 0x00, 0x00, 0x00, 0x1];
+        let mut parser = Parser::new(&code);
+        let result = parser.uint32().unwrap();
+        assert_eq!(result, 0x1);
+    }
+
+    #[test]
+    fn uint32_cannot_consume_next_4_bytes_if_not_available() {
+        let code = vec![0x01, 0x00, 0x00];
+        let mut parser = Parser::new(&code);
+        let result = parser.uint32().unwrap_err();
+        assert_eq!(result, Error::BufferEndReached);
+    }
+
+    #[test]
+    fn uint32_cannot_consume_next_4_bytes_if_not_available_2() {
+        let code = vec![];
+        let mut parser = Parser::new(&code);
+        let result = parser.uint32().unwrap_err();
+        assert_eq!(result, Error::BufferEndReached);
+    }
+
+    #[test]
+    fn varint7_can_consume_next_byte_if_available_and_valid() {
+        let code = vec![0x7f, 0x00, 0x00];
+        let mut parser = Parser::new(&code);
+        let result = parser.varint7().unwrap();
+        assert_eq!(result, -0x1);
+    }
+
+    #[test]
+    fn varint7_can_consume_next_byte_if_available_and_valid_2() {
+        let code = vec![0x60];
+        let mut parser = Parser::new(&code);
+        let result = parser.varint7().unwrap();
+        assert_eq!(result, -0x20);
+    }
+
+    #[test]
+    fn varint7_cannot_consume_next_byte_if_not_available() {
+        let code = vec![];
+        let mut parser = Parser::new(&code);
+        let result = parser.varint7().unwrap_err();
+        assert_eq!(result, Error::BufferEndReached);
+    }
+
+    #[test]
+    fn varint7_cannot_consume_next_byte_if_not_valid_varint7() {
+        let code = vec![0b1000_0000];
+        let mut parser = Parser::new(&code);
+        let result = parser.varint7().unwrap_err();
+        assert_eq!(result, Error::InvalidVarint7);
+    }
+
+    #[test]
+    fn varuint7_can_consume_next_byte_if_available_and_valid_2() {
+        let code = vec![0b0100_0000];
+        let mut parser = Parser::new(&code);
+        let result = parser.varuint7().unwrap();
+        assert_eq!(result, 0b0100_0000);
+    }
+
+    #[test]
+    fn varuint7_cannot_consume_next_byte_if_not_available() {
+        let code = vec![];
+        let mut parser = Parser::new(&code);
+        let result = parser.varuint7().unwrap_err();
+        assert_eq!(result, Error::BufferEndReached);
+    }
+
+    #[test]
+    fn varuint7_cannot_consume_next_byte_if_not_valid_varuint7() {
+        let code = vec![0b1000_0000];
+        let mut parser = Parser::new(&code);
+        let result = parser.varuint7().unwrap_err();
+        assert_eq!(result, Error::InvalidVaruint7);
+    }
+}
+
