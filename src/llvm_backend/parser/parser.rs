@@ -43,7 +43,6 @@ impl <'a> Parser<'a> {
 
     pub fn module(&mut self) {
         println!("= Parsing wasm module! =");
-        // println!("char = {:?}", self.code[self.cusror]);
         self.preamble();
     }
 
