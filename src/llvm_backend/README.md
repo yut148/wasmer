@@ -277,10 +277,19 @@ if byte's msb is unset, you can break the loop
 ```
 
 
-## PREAMBLE
+## DISECTION
 | Sections        | Storage  |
 | ------------- |:-------------:|
 | magic number | uint32 |
 | version | uint32  |
 
 
+### INITIAL SUPPORT
+preamble
+types
+imports
+tables
+initializations
+memory
+functions
+exports
