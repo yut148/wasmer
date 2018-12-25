@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+// use llvm_sys;
 
 /* ------------------------------------------------------------------ */
 
@@ -37,14 +38,51 @@ struct Imports {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error {
     BufferEndReached,
+    // Storage
     InvalidVaruint1,
     InvalidVaruint7,
     InvalidVarint7,
     InvalidVaruint32,
     InvalidVarint32,
     InvalidVarint64,
+    // Types
+    InvalidValueType,
+    // ExternalKind
+    InvalidImportType,
+    // Preamble
     InvalidMagicNumber,
     InvalidVersionNumber,
+    // Sections
+    SectionAlreadyDefined,
+    UnsupportedSection,
+    InvalidSectionId,
+    SectionPayloadDoesNotMatchPayloadLength,
+    // Custom Section
+    IncompleteCustomSection,
+    InvalidPayloadLengthInCustomSection,
+    InvalidNameLengthInCustomSection,
+    // Type Section
+    IncompleteTypeSection,
+    InvalidPayloadLengthInTypeSection,
+    InvalidEntryCountInTypeSection,
+    EntriesDoNotMatchEntryCountInTypeSection,
+    InvalidTypeInTypeSection,
+    UnsupportedTypeInTypeSection,
+    // Import Entry
+    IncompleteImportEntry,
+    InvalidModuleLengthInImportEntry,
+    ModuleStringDoesNotMatchModuleLengthInImportEntry,
+    InvalidFieldLengthInImportEntry,
+    FieldStringDoesNotMatchFieldLengthInImportEntry,
+    InvalidImportTypeInImportEntry,
+    // Function Type
+    IncompleteFunctionType,
+    InvalidParamCountInFunctionType,
+    ParamsDoesNotMatchParamCountInFunctionType,
+    InvalidParamTypeInFunctionType,
+    InvalidReturnCountInFunctionType,
+    InvalidReturnTypeInFunctionType,
+    ReturnTypeDoesNotMatchReturnCountInFunctionType,
 }
 
 /* ------------------------------------------------------------------ */
@@ -73,7 +111,7 @@ impl <'a> Parser<'a> {
     /// Generates the `module` object by calling functions
     /// that parse a wasm module.
     pub fn module(&mut self) {
-        println!("\n= module! =");
+        println!("\n=== module! ===");
 
         // Consume preamble. Panic if it returns an error.
         self.module_preamble().unwrap();
@@ -81,7 +119,7 @@ impl <'a> Parser<'a> {
         // Error::InvalidMagicNumber => same
         // Error::InvalidVersionNumber => same
 
-        self.module_body().unwrap();
+        self.module_sections().unwrap(); // Optional
         // Error::BufferEndReached => MalformedWasmModule
         // ...
     }
@@ -90,13 +128,17 @@ impl <'a> Parser<'a> {
     /// Checks if the following bytes are expected
     /// wasm preamble bytes.
     pub fn module_preamble(&mut self) -> Result<(), Error> {
-        println!("\n= module_preamble! =");
+        println!("\n=== module_preamble! ===");
+
         // Consume magic number.
         let magic_no = self.uint32()?;
+
         // Consume version number.
         let version_no = self.uint32()?;
 
-        println!("magic = 0x{:08x}, version = 0x{:08x}", magic_no, version_no);
+        println!("\n::module_preamble::magic_no = 0x{:08x}", magic_no);
+
+        println!("\n::module_preamble::version_no = 0x{:08x}", version_no);
 
         // Magic number must be `\0asm`
         if magic_no != 0x6d736100 {
@@ -112,9 +154,382 @@ impl <'a> Parser<'a> {
     }
 
     /// TODO: TEST
-    pub fn module_body(&mut self) -> Result<(), Error> {
-        println!("\n= module_body! =");
+    pub fn module_sections(&mut self) -> Result<(), (Error, usize)> {
+        println!("\n=== module_sections! ===");
+
+        //
+        let mut sections_consumed = vec![];
+
+        //
+        loop {
+            let start_position = self.cursor;
+            //
+            let section_id = match self.varuint7() {
+                Ok(value) => value,
+                Err(error) => {
+                    //
+                    if error == Error::BufferEndReached {
+                        break;
+                    } else {
+                        return Err((Error::InvalidSectionId, start_position));
+                    }
+                },
+            };
+
+            //
+            if sections_consumed.contains(&section_id) {
+                return Err((Error::SectionAlreadyDefined, start_position));
+            } else {
+                sections_consumed.push(section_id);
+            }
+
+            //
+            match section_id {
+                0x00 => self.custom_section()?,
+                0x01 => self.type_section()?,
+                0x02 => self.import_section()?,
+                _ => {
+                    return Err((Error::UnsupportedSection, start_position));
+                },
+            };
+        }
         Ok(())
+    }
+
+    /// TODO: TEST
+    pub fn custom_section(&mut self) -> Result<(), (Error, usize)> {
+        println!("\n=== custom_section! ===");
+        let start_position = self.cursor;
+
+        //
+        let payload_len = match self.varint32() {
+            Ok(value) => value,
+            Err(error) => {
+                //
+                if error == Error::BufferEndReached {
+                    return Err((Error::IncompleteCustomSection, start_position));
+                } else {
+                    return Err((Error::InvalidPayloadLengthInCustomSection, start_position));
+                }
+            }
+        };
+
+        //
+        let name_len = match self.varint32() {
+            Ok(value) => value,
+            Err(error) => {
+                //
+                if error == Error::BufferEndReached {
+                    return Err((Error::IncompleteCustomSection, start_position));
+                } else {
+                    return Err((Error::InvalidEntryCountInTypeSection, start_position));
+                }
+            }
+        };
+
+        {
+            // Skip payload bytes
+            let _name = match self.eat_bytes(name_len as _) {
+                Some(value) => value,
+                None => {
+                    return Err((Error::IncompleteCustomSection, start_position));
+                }
+            };
+        }
+
+        // Skip payload bytes
+        let _payload_data = match self.eat_bytes(payload_len as _) {
+            Some(value) => value,
+            None => {
+                return Err((Error::IncompleteCustomSection, start_position));
+            }
+        };
+
+        Ok(())
+    }
+
+    /// TODO: TEST
+    pub fn type_section(&mut self) -> Result<(), (Error, usize)> {
+        println!("\n=== type_section! ===");
+        let start_position = self.cursor;
+
+        //
+        let payload_len = match self.varuint32() {
+            Ok(value) => value,
+            Err(error) => {
+                //
+                if error == Error::BufferEndReached {
+                    return Err((Error::IncompleteTypeSection, start_position));
+                } else {
+                    return Err((Error::InvalidPayloadLengthInTypeSection, start_position));
+                }
+            }
+        };
+
+        println!("\n::type_section::payload_len = 0x{:x}", payload_len);
+
+        //
+        let entry_count = match self.varuint32() {
+            Ok(value) => value,
+            Err(error) => {
+                //
+                if error == Error::BufferEndReached {
+                    return Err((Error::IncompleteTypeSection, start_position));
+                } else {
+                    return Err((Error::InvalidEntryCountInTypeSection, start_position));
+                }
+            }
+        };
+
+        println!("\n::type_section::entry_count = 0x{:x}", entry_count);
+
+        //
+        for i in 0..entry_count {
+            let type_id = match self.varint7() {
+                Ok(value) => value,
+                Err(error) => {
+                    //
+                    if error == Error::BufferEndReached {
+                        return Err((Error::EntriesDoNotMatchEntryCountInTypeSection, start_position));
+                    } else {
+                        return Err((Error::InvalidTypeInTypeSection, start_position));
+                    }
+                },
+            };
+
+            println!("\n::type_section::type_id = {:?}", type_id);
+
+            match type_id {
+                -0x20 => self.func_type()?,
+                _ => {
+                    return Err((Error::UnsupportedTypeInTypeSection, start_position));
+                },
+            };
+        }
+
+        Ok(())
+    }
+
+    /// TODO: TEST
+    pub fn import_section(&mut self) -> Result<(), (Error, usize)> {
+        println!("\n=== import_section! ===");
+        let start_position = self.cursor;
+
+        //
+        let payload_len = match self.varuint32() {
+            Ok(value) => value,
+            Err(error) => {
+                //
+                if error == Error::BufferEndReached {
+                    return Err((Error::IncompleteTypeSection, start_position));
+                } else {
+                    return Err((Error::InvalidPayloadLengthInTypeSection, start_position));
+                }
+            }
+        };
+        println!("\n::import_section::payload_len = 0x{:x}", payload_len);
+
+        //
+        let entry_count = match self.varuint32() {
+            Ok(value) => value,
+            Err(error) => {
+                //
+                if error == Error::BufferEndReached {
+                    return Err((Error::IncompleteTypeSection, start_position));
+                } else {
+                    return Err((Error::InvalidEntryCountInTypeSection, start_position));
+                }
+            }
+        };
+
+        println!("\n::import_section::entry_count = 0x{:x}", entry_count);
+
+        //
+        for i in 0..entry_count {
+            // Throwing away type for now!
+            self.import_entry()?;
+        }
+
+        Ok(())
+    }
+
+    /// TODO: TEST
+    // pub fn import_entry(&mut self) -> Result<(), (Error, usize)> {
+    //     println!("\n=== import_entry! ===");
+    //     let start_position = self.cursor;
+
+    //     //
+    //     let module_len = match self.varuint32() {
+    //         Ok(value) => value,
+    //         Err(error) => {
+    //             //
+    //             if error == Error::BufferEndReached {
+    //                 return Err((Error::IncompleteImportEntry, start_position));
+    //             } else {
+    //                 return Err((Error::InvalidModuleLengthInImportEntry, start_position));
+    //             }
+    //         }
+    //     };
+
+    //     println!("\n::import_entry::module_len = 0x{:x}", payload_len);
+
+    //     let _module_str = match self.eat_bytes(name_len as _) {
+    //         Some(value) => value,
+    //         None => {
+    //             return Err((Error::IncompleteImportEntry, start_position));
+    //         }
+    //     };
+
+    //     println!("\n::import_entry::_module_str = {:?}", std::str::from_utf8(_module_str));
+
+    //     //
+    //     let field_len = match self.varint32() {
+    //         Ok(value) => value,
+    //         Err(error) => {
+    //             //
+    //             if error == Error::BufferEndReached {
+    //                 return Err((Error::IncompleteImportEntry, start_position));
+    //             } else {
+    //                 return Err((Error::InvalidFieldLengthInImportEntry, start_position));
+    //             }
+    //         }
+    //     };
+
+    //     println!("\n::import_entry::field_len = 0x{:x}", payload_len);
+
+    //     let _field_str = match self.eat_bytes(name_len as _) {
+    //         Some(value) => value,
+    //         None => {
+    //             return Err((Error::IncompleteImportEntry, start_position));
+    //         }
+    //     };
+
+    //     println!("\n::import_entry::_field_str = {:?}", std::str::from_utf8(_module_str));
+
+    //     let external_kind =  match self.external_kind() {
+    //         Ok(value) => value,
+    //         Err(error) => {
+    //             if error == Error::BufferEndReached {
+    //                 return Err((Error::IncompleteImportEntry, start_position));
+    //             } else {
+    //                 return Err((Error::InvalidImportTypeInImportEntry, start_position));
+    //             }
+    //         }
+    //     };
+
+    //     match external_kind {
+    //         // Function import
+    //         0x01 => self.function_import(),
+    //         // Table import
+    //         0x02 => self.table_import(),
+    //         // Memory import
+    //         0x03 => self.memory_import(),
+    //         // Global import
+    //         0x04 => self.global_import(),
+    //     }
+
+    //     Ok(())
+    // }
+
+    //
+    pub fn func_type(&mut self) -> Result<(), (Error, usize)> {
+        println!("\n=== func_type! ===");
+        let start_position = self.cursor;
+
+        //
+        let param_count = match self.varint32() {
+            Ok(value) => value,
+            Err(error) => {
+                //
+                if error == Error::BufferEndReached {
+                    return Err((Error::IncompleteFunctionType, start_position));
+                } else {
+                    return Err((Error::InvalidParamCountInFunctionType, start_position));
+                }
+            }
+        };
+
+        println!("\n::func_type::param_count = 0x{:x}", param_count);
+
+        //
+        for i in 0..param_count {
+            // Throwing away type for now!
+            let param_type = match self.value_type() {
+                Ok(value) => value,
+                Err(error) => {
+                    if error == Error::BufferEndReached {
+                        return Err((Error::IncompleteFunctionType, start_position));
+                    } else {
+                        return Err((Error::InvalidParamTypeInFunctionType, start_position));
+                    }
+                }
+            };
+
+            println!("\n::func_type::param_type = {:?}", param_type);
+        }
+
+        //
+        let return_count = match self.varuint1() {
+            Ok(value) => value,
+            Err(error) => {
+                //
+                if error == Error::BufferEndReached {
+                    return Err((Error::IncompleteFunctionType, start_position));
+                } else {
+                    return Err((Error::InvalidReturnCountInFunctionType, start_position));
+                }
+            }
+        };
+
+        println!("\n::func_type::return_count = {:?}", return_count);
+
+        if return_count {
+            // Throwing away type for now!
+            let return_type = match self.value_type() {
+                Ok(value) => value,
+                Err(error) => {
+                    if error == Error::BufferEndReached {
+                        return Err((Error::IncompleteFunctionType, start_position));
+                    } else {
+                        return Err((Error::InvalidReturnTypeInFunctionType, start_position));
+                    }
+                }
+            };
+
+            println!("\n::func_type::return_type = {:?}", return_type);
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    //
+    pub fn value_type(&mut self) -> Result<i8, Error> {
+        println!("\n=== value_type! ===");
+
+        let value = self.varint7()?;
+
+        // i32, i64, f32, f64
+        if value == -0x01 || value == -0x02 || value == -0x03 || value == -0x04 {
+            Ok(value as _)
+        } else {
+            Err(Error::InvalidValueType)
+        }
+    }
+
+    #[inline]
+    //
+    pub fn external_kind(&mut self) -> Result<u8, Error> {
+        println!("\n=== external_kind! ===");
+
+        let value = self.uint8()?;
+
+        // function_import, table_import, memory_imoort, global_import
+        if value == 0x01 || value == 0x02 || value == 0x03 || value == 0x04 {
+            Ok(value as _)
+        } else {
+            Err(Error::InvalidImportType)
+        }
     }
 
     #[inline]
@@ -145,16 +560,16 @@ impl <'a> Parser<'a> {
         Some(&self.code[start..end])
     }
 
-    /// Consumes 1 byte that represents 8-bit unsigned integer
-    pub fn uint8(&mut self) -> Result<u8, Error> {
+    /// Consumes 1 byte that represents a 8-bit unsigned integer
+    fn uint8(&mut self) -> Result<u8, Error> {
         if let Some(byte) = self.eat_byte() {
             return Ok(byte);
         }
         Err(Error::BufferEndReached)
     }
 
-    /// Consumes 2 bytes that represent 16-bit unsigned integer
-    pub fn uint16(&mut self) -> Result<u16, Error> {
+    /// Consumes 2 bytes that represent a 16-bit unsigned integer
+    fn uint16(&mut self) -> Result<u16, Error> {
         if let Some(bytes) = self.eat_bytes(2) {
             let mut shift = 0;
             let mut result = 0;
@@ -167,8 +582,8 @@ impl <'a> Parser<'a> {
         Err(Error::BufferEndReached)
     }
 
-    /// Consumes 4 bytes that represent 32-bit unsigned integer
-    pub fn uint32(&mut self) -> Result<u32, Error> {
+    /// Consumes 4 bytes that represent a 32-bit unsigned integer
+    fn uint32(&mut self) -> Result<u32, Error> {
         if let Some(bytes) = self.eat_bytes(4) {
             let mut shift = 0;
             let mut result = 0;
@@ -212,7 +627,7 @@ impl <'a> Parser<'a> {
 
     /// Consumes 1-5 bytes that represent a 32-bit LEB128 unsigned integer encoding
     fn varuint32(&mut self) -> Result<u32, Error> {
-        // println!("= varuint32! =");
+        // println!("= varuint32! ===");
         let mut result = 0;
         let mut shift = 0;
         while shift < 35 {
@@ -256,7 +671,7 @@ impl <'a> Parser<'a> {
 
     /// Consumes 1-5 bytes that represent a 32-bit LEB128 signed integer encoding
     fn varint32(&mut self) -> Result<i32, Error> {
-        // println!("= varint32! =");
+        // println!("= varint32! ===");
         let mut result = 0;
         let mut shift = 0;
         // Can consume at most 5 bytes
@@ -289,7 +704,7 @@ impl <'a> Parser<'a> {
     /// TODO: TEST
     /// Consumes 1-9 bytes that represent a 64-bit LEB128 signed integer encoding
     fn varint64(&mut self) -> Result<i64, Error> {
-        // println!("= varint64! =");
+        // println!("= varint64! ===");
         let mut result = 0;
         let mut shift = 0;
         // Can consume at most 9 bytes

@@ -196,6 +196,7 @@ enum ImportValue {
 - fuzz tests
 - unittests
 - validation (utf8 and semantics)
+- error messages and making error position point of error instead of start_position
 
 ### FUTURE ADDITIONS
 - Lazy compilation
@@ -276,20 +277,19 @@ if result & 0x0100_0000 == 0x0100_0000 {
 if byte's msb is unset, you can break the loop
 ```
 
-
-## DISECTION
+## MODULE DISECTION
 | Sections        | Storage  |
 | ------------- |:-------------:|
 | magic number | uint32 |
 | version | uint32  |
 
 
-### INITIAL SUPPORT
-preamble
-types
-imports
-tables
-initializations
-memory
-functions
-exports
+### INITIAL PARSING SUPPORT
+- preamble
+- types
+- imports
+- tables
+- initializations
+- memory
+- functions
+- exports
