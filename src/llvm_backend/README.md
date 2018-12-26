@@ -13,10 +13,26 @@
 - Be faster than the Cranelift backend (compile-time and runtime)
 - Have an API similar to cranelift-wasm
 
-### TO MAKE IT WASM64
-- import and member module index must be u64
-- tables should have a boundedSlice of u64
-- indexing memories, tables, globals should be in u64
+### STRATEGY
+- Single-pass parsing and codegen from wasm to LLVM IR
+
+### CURRENT SUPPORT
+- preamble
+- types
+- imports
+- functions
+
+### TODO
+- wasm32 to LLVMIR
+- fuzz tests
+- unittests
+- validation (utf8 [Unicode Standard 11.0, Section 3.9, Table 3-7. Well-Formed UTF-8 Byte Sequences] and semantics)
+https://www.unicode.org/versions/Unicode11.0.0/ch03.pdf
+https://webassembly.github.io/spec/core/binary/values.html#names
+- error messages and making error position point of error instead of start_position
+
+### FUTURE ADDITIONS
+- Lazy compilation
 
 ### PROCESS ADDRESS SPACE (LINUX x86-64 EXAMPLE)
 ```
@@ -190,19 +206,10 @@ enum ImportValue {
             * wasmer::jit::Memory
         -
 
-
-### TODO
-- wasm32 to LLVMIR
-- fuzz tests
-- unittests
-- validation (utf8 and semantics)
-- error messages and making error position point of error instead of start_position
-
-### FUTURE ADDITIONS
-- Lazy compilation
-
-### STRATEGY
-- Single-pass parsing and codegen from wasm to LLVM IR
+### TO MAKE IT WASM64
+- import and member module index must be u64
+- tables should have a boundedSlice of u64
+- indexing memories, tables, globals should be in u64
 
 # ENCODING
 ## LEB128
@@ -277,19 +284,16 @@ if result & 0x0100_0000 == 0x0100_0000 {
 if byte's msb is unset, you can break the loop
 ```
 
-## MODULE DISECTION
-| Sections        | Storage  |
-| ------------- |:-------------:|
-| magic number | uint32 |
-| version | uint32  |
 
-
-### INITIAL PARSING SUPPORT
-- preamble
-- types
-- imports
-- tables
-- initializations
-- memory
-- functions
-- exports
+### WELL-FORMED UTF-8 BYTE SEQUENCES
+| Code Points        | First Byte   | Second Byte    | Third Byte    | Fourth Byte   |
+|:-------------------|:-------------|:---------------|:--------------|:--------------|
+| U+0000..U+007F     | 00..7F       |                |               |               |
+| U+0080..U+07FF     | C2..DF       | 80..BF         |               |               |
+| U+0800..U+0FFF     | E0           | A0..BF         | 80..BF        |               |
+| U+1000..U+CFFF     | E1..EC       | 80..BF         | 80..BF        |               |
+| U+D000..U+D7FF     | ED           | 80..9F         | 80..BF        |               |
+| U+E000..U+FFFF     | EE..EF       | 80..BF         | 80..BF        |               |
+| U+10000..U+3FFFF   | F0           | 90..BF         | 80..BF        | 80..BF        |
+| U+40000..U+FFFFF   | F1..F3       | 80..BF         | 80..BF        | 80..BF        |
+| U+100000..U+10FFFF | F4           | 80..8F         | 80..BF        | 80..BF        |
