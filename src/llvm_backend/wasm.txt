@@ -15,10 +15,10 @@ func    - 0x60 - -0x20
 ()      - 0x40 - -0x40
 
 EXTERNAL_KIND [uint8]
-function_import - 0x01
-table_import    - 0x02
-memory_imoort   - 0x03
-global_import   - 0x04
+function_import - 0x00
+table_import    - 0x01
+memory_import   - 0x02
+global_import   - 0x03
 
 SECTION_ID
 Type     - 0x1
@@ -51,15 +51,6 @@ param_types  - value_type*
 return_count - varuint1 (to know if return type is present)
 return_type  - valuetype?
 
-GLOBAL_TYPE
-content_type - value_type
-mutability   - varuint1
-
-RESIZABLE_LIMIT
-flags        - varuint1 (to know if maximum is present)
-initial      - varunit32
-maximum      - varunit32?
-
 TABLE_TYPE
 element_type - elem_type
 limits       - resizable_limit
@@ -67,6 +58,14 @@ limits       - resizable_limit
 MEMORY_TYPE
 limits       - resizable_limit
 
+GLOBAL_TYPE
+content_type - value_type
+mutability   - varuint1
+
+RESIZABLE_LIMIT
+flags        - varuint1 (to know if maximum is present)
+initial      - varuint32
+maximum      - varuint32?
 
 INIT_EXPR
 ...
@@ -125,19 +124,3 @@ kind       - external_kind
 
     GLOBAL IMPORT
     type - global_type
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
