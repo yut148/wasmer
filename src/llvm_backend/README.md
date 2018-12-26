@@ -295,6 +295,8 @@ if byte's msb is unset, you can break the loop
 ```
 
 ### WELL-FORMED UTF-8 BYTE SEQUENCES
+Based on Unicode Standard 11.0, Section 3.9, Table 3-7.
+
 | Code Points        | First Byte   | Second Byte    | Third Byte    | Fourth Byte   |
 |:-------------------|:-------------|:---------------|:--------------|:--------------|
 | U+0000..U+007F     | 00..7F       |                |               |               |
@@ -306,3 +308,4 @@ if byte's msb is unset, you can break the loop
 | U+10000..U+3FFFF   | F0           | 90..BF         | 80..BF        | 80..BF        |
 | U+40000..U+FFFFF   | F1..F3       | 80..BF         | 80..BF        | 80..BF        |
 | U+100000..U+10FFFF | F4           | 80..8F         | 80..BF        | 80..BF        |
+
