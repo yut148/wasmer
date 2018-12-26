@@ -28,7 +28,7 @@ precommit: lint test
 
 test:
 	# We use one thread so the emscripten stdouts doesn't collide
-	cargo test -- --test-threads=1 $(runargs) 
+	cargo test -- --test-threads=1 $(runargs)
 
 release:
 	# If you are in OS-X, you will need mingw-w64 for cross compiling to windows
@@ -37,6 +37,9 @@ release:
 
 debug-release:
 	cargo build --release --features "debug"
+
+debug-release-llvm:
+	LLVM_SYS_60_PREFIX=${HOME}/Desktop/llvm/llvm-6.0.1 cargo build --release --features "debug"
 
 publish-release:
 	ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${VERSION} ./artifacts/
