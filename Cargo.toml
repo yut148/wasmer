@@ -49,7 +49,7 @@ rayon = "1.0.3"
 byteorder = "1"
 indicatif = "0.10"
 console = "0.7.1"
-llvm-sys = "60"
+# llvm-sys = "60"
 
 [build-dependencies]
 wabt = "0.7.2"

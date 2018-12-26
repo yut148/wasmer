@@ -12,6 +12,7 @@
 ### GOAL
 - Be faster than the Cranelift backend (compile-time and runtime)
 - Have an API similar to cranelift-wasm
+- Good error messages
 
 ### STRATEGY
 - Single-pass parsing and codegen from wasm to LLVM IR

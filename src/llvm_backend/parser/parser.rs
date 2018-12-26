@@ -56,7 +56,7 @@ fn validate_utf8(bytes: &[u8]) -> bool {
         } else if // 2-byte encoding
             // Check if there is at least 2 bytes needed by following conditions.
             cursor < length - 2 &&
-            (bytes[cursor] >= 0xC2 && bytes[cursor] =< 0xDF) && // byte_1
+            (bytes[cursor] >= 0xC2 && bytes[cursor] <= 0xDF) && // byte_1
             (bytes[cursor + 1] >= 0x80 && bytes[cursor + 1] <= 0xBF) { // byte_2
             cursor += 2;
         } else if // 3-byte encoding
@@ -64,8 +64,8 @@ fn validate_utf8(bytes: &[u8]) -> bool {
             cursor < length - 3 &&
             (
                 (bytes[cursor] == 0xE0) && // byte_1
-                (bytes[cursor + 1] >= 0xA0 && bytes[cursor + 1] =< 0xBF) && // byte_2
-                (bytes[cursor + 2] >= 0x80 && bytes[cursor + 3] =< 0xBF) // byte_3
+                (bytes[cursor + 1] >= 0xA0 && bytes[cursor + 1] <= 0xBF) && // byte_2
+                (bytes[cursor + 2] >= 0x80 && bytes[cursor + 3] <= 0xBF) // byte_3
             ) ||
             (
                 ((bytes[cursor] >= 0xE1 && bytes[cursor] <= 0xEC) || (bytes[cursor] >= 0xEE && bytes[cursor] <= 0xEF)) && // byte_1
@@ -83,15 +83,15 @@ fn validate_utf8(bytes: &[u8]) -> bool {
             cursor < length - 4 &&
             (
                 (bytes[cursor] == 0xF0) && // byte_1
-                (bytes[cursor + 1] >= 0x80 && bytes[cursor + 1] =< 0xBF) && // byte_2
-                (bytes[cursor + 2] >= 0x7F && bytes[cursor + 2] =< 0xBF) && // byte_3
-                (bytes[cursor + 3] >= 0x7F && bytes[cursor + 3] =< 0xBF) // byte_4
+                (bytes[cursor + 1] >= 0x80 && bytes[cursor + 1] <= 0xBF) && // byte_2
+                (bytes[cursor + 2] >= 0x7F && bytes[cursor + 2] <= 0xBF) && // byte_3
+                (bytes[cursor + 3] >= 0x7F && bytes[cursor + 3] <= 0xBF) // byte_4
             ) ||
             (
-                ((bytes[cursor] >= 0xF1 && bytes[cursor] =< 0xF3) || (bytes[cursor] == 0xF4)) && // byte_1
-                (bytes[cursor + 1] >= 0x80 && bytes[cursor + 1] =< 0xBF) && // byte_2
-                (bytes[cursor + 2] >= 0x80 && bytes[cursor + 2] =< 0xBF) && // byte_3
-                (bytes[cursor + 3] >= 0x80 && bytes[cursor + 3] =< 0xBF) // byte_4
+                ((bytes[cursor] >= 0xF1 && bytes[cursor] <= 0xF3) || (bytes[cursor] == 0xF4)) && // byte_1
+                (bytes[cursor + 1] >= 0x80 && bytes[cursor + 1] <= 0xBF) && // byte_2
+                (bytes[cursor + 2] >= 0x80 && bytes[cursor + 2] <= 0xBF) && // byte_3
+                (bytes[cursor + 3] >= 0x80 && bytes[cursor + 3] <= 0xBF) // byte_4
             ) {
             cursor += 4;
         } else {
@@ -344,7 +344,7 @@ impl <'a> Parser<'a> {
         };
 
         {
-            /// TODO: Validate UTF-8
+            // TODO: Validate UTF-8
             // Skip payload bytes
             let _name = match self.eat_bytes(name_len as _) {
                 Some(value) => value,
@@ -490,7 +490,7 @@ impl <'a> Parser<'a> {
         println!("\n::import_entry::module_len = 0x{:x}", module_len);
 
         {
-            /// TODO: Validate UTF-8
+            // TODO: Validate UTF-8
             let _module_str = match self.eat_bytes(module_len as _) {
                 Some(value) => value,
                 None => {
@@ -517,7 +517,7 @@ impl <'a> Parser<'a> {
         println!("\n::import_entry::field_len = 0x{:x}", field_len);
 
         {
-            /// TODO: Validate UTF-8
+            // TODO: Validate UTF-8
             let _field_str = match self.eat_bytes(field_len as _) {
                 Some(value) => value,
                 None => {
