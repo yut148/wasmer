@@ -190,13 +190,23 @@ enum ImportValue {
 - Restructure project
     - errors
         - error.rs
-            * wasmer::error::Error
+            * wasmer::wasm::Error
+            * wasmer::wasm::error_to_string
     - parser
         - parser.rs
             * wasmer::wasm::Parser
+    - examples
+        - malformed
+            - bytes
+            - wasm
+            - wat
+        - well_formed
+            - bytes
+            - wasm
+            - wat
     - semantics
         - validate.rs
-            * wasmer::wasm::validate
+            * wasmer::wasm::validate_utf8
     - jit
         - module.rs
             * wasmer::jit::Module
@@ -204,7 +214,7 @@ enum ImportValue {
             * wasmer::jit::Instance
         - memory
             * wasmer::jit::Memory
-        -
+        ...
 
 ### TO MAKE IT WASM64
 - import and member module index must be u64
@@ -283,7 +293,6 @@ if result & 0x0100_0000 == 0x0100_0000 {
 
 if byte's msb is unset, you can break the loop
 ```
-
 
 ### WELL-FORMED UTF-8 BYTE SEQUENCES
 | Code Points        | First Byte   | Second Byte    | Third Byte    | Fourth Byte   |
