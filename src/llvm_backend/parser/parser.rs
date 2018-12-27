@@ -160,8 +160,14 @@ pub enum Error {
     MalformedResizableLimitInTableImport,
     // Memory Import
     IncompleteMemoryImport,
+    MalformedFlagsInMemoryImport,
+    MalformedInitialInMemoryImport,
+    MalformedMaximumInMemoryImport,
+    MalformedResizableLimitInMemoryImport,
     // Global Import
     IncompleteGlobalImport,
+    MalformedContentTypeInGlobalImport,
+    MalformedMutabilityInGlobalImport,
     // Resizable Limits
     IncompleteResizableLimits,
     MalformedFlagsInResizableLimits,
@@ -544,10 +550,10 @@ impl <'a> Parser<'a> {
             0x00 => self.function_import()?,
             // Table import
             0x01 => self.table_import()?,
-            // // Memory import
-            // 0x03 => self.memory_import()?,
-            // // Global import
-            // 0x04 => self.global_import()?,
+            // Memory import
+            0x02 => self.memory_import()?,
+            // Global import
+            0x03 => self.global_import()?,
             _ => {
                 return Err((Error::InvalidImportTypeInImportEntry, start_position));
             }
@@ -560,9 +566,9 @@ impl <'a> Parser<'a> {
         println!("\n=== function_import! ===");
         let start_position = self.cursor;
 
-        /// TODO: LLVM module construction
+        // TODO: LLVM module construction
         let type_index = match self.varuint32() {
-            /// TODO. Validate type_index
+            // TODO. Validate type_index
             Ok(value) => value,
             Err(error) => {
                 //
@@ -583,7 +589,7 @@ impl <'a> Parser<'a> {
         println!("\n=== table_import! ===");
         let start_position = self.cursor;
 
-        /// TODO: LLVM module construction
+        // TODO: LLVM module construction
         let element_type = match self.varint7() {
             Ok(value) => {
                 // Must be anyfunc
@@ -608,7 +614,7 @@ impl <'a> Parser<'a> {
         let (initial, maximum) = match self.resizable_limits() {
             Ok(value) => value,
             Err(error) => {
-                /// TODO: LLVM module construction
+                // TODO: LLVM module construction
                 let err = match error {
                     (Error::BufferEndReached, _) => Error::IncompleteTableImport,
                     (Error::MalformedFlagsInResizableLimits, _) => Error::MalformedFlagsInTableImport,
@@ -624,6 +630,71 @@ impl <'a> Parser<'a> {
         println!("\n::table_import::initial = {:?}", initial);
 
         println!("\n::table_import::maximum = {:?}", maximum);
+
+        Ok(())
+    }
+
+    pub fn memory_import(&mut self) -> Result<(), (Error, usize)> {
+        println!("\n=== memory_import! ===");
+        let start_position = self.cursor;
+
+        //
+        let (initial, maximum) = match self.resizable_limits() {
+            Ok(value) => value,
+            Err(error) => {
+                /// TODO: LLVM module construction
+                let err = match error {
+                    (Error::BufferEndReached, _) => Error::IncompleteMemoryImport,
+                    (Error::MalformedFlagsInResizableLimits, _) => Error::MalformedFlagsInMemoryImport,
+                    (Error::MalformedInitialInResizableLimits, _) => Error::MalformedInitialInMemoryImport,
+                    (Error::MalformedMaximumInResizableLimits, _) => Error::MalformedMaximumInMemoryImport,
+                    (_, _) => Error::MalformedResizableLimitInMemoryImport,
+                };
+
+                return Err((err, start_position))
+            }
+        };
+
+        println!("\n::memory_import::initial = {:?}", initial);
+
+        println!("\n::memory_import::maximum = {:?}", maximum);
+
+        Ok(())
+    }
+
+    pub fn global_import(&mut self) -> Result<(), (Error, usize)> {
+        println!("\n=== global_import! ===");
+        let start_position = self.cursor;
+
+        // TODO: LLVM module construction
+        let content_type = match self.value_type() {
+            Ok(value) => value,
+            Err(error) => {
+                //
+                if error == Error::BufferEndReached {
+                    return Err((Error::IncompleteGlobalImport, start_position));
+                } else {
+                    return Err((Error::MalformedContentTypeInGlobalImport, start_position));
+                }
+            }
+        };
+
+        println!("\n::global_import::content_type = {:?}", content_type);
+
+        // TODO: LLVM module construction
+        let mutability = match self.varuint1() {
+            Ok(value) => value,
+            Err(error) => {
+                //
+                if error == Error::BufferEndReached {
+                    return Err((Error::IncompleteGlobalImport, start_position));
+                } else {
+                    return Err((Error::MalformedMutabilityInGlobalImport, start_position));
+                }
+            }
+        };
+
+        println!("\n::global_import::mutability = {:?}", mutability);
 
         Ok(())
     }

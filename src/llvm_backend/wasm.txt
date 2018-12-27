@@ -1,5 +1,7 @@
 21/12/2018
 
+https://github.com/WebAssembly/design/blob/master/BinaryEncoding.md
+
 WASM BINARY BREAKDOWN
 =================================
 TYPES
@@ -124,3 +126,27 @@ kind       - external_kind
 
     GLOBAL IMPORT
     type - global_type
+
+FUNCTION SECTION
+count - varuint32
+types - varuint32* (type indices of functions)
+
+.......... Skip ...........
+
+CODE SECTION
+count    - varuint32
+bodies   - function_body*
+
+    FUNCTION_BODY
+    body_size     - varuint32 (in bytes)
+    local_count   - varuint32
+    locals        - local_entry*
+        LOCAL_ENTRY
+            count   - varuint32
+            type    - value_type
+    code         - byte*
+    end          - byte
+
+
+CONTROL FLOW OPERATORS
+nop
