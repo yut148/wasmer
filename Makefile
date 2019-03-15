@@ -58,3 +58,6 @@ debug-release:
 
 publish-release:
 	ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${VERSION} ./artifacts/
+
+visualization:
+	gource --stop-at-end --default-user-image images/default.png --user-image-dir images  --user-scale 1.5 --bloom-intensity 0.3 --logo logo-small.png --hide filenames --dir-name-depth 2 --background-image background2.jpg --font-colour 000000 --dir-colour 333333 --selection-colour 533AC9 --highlight-colour 533AC9 --seconds-per-day 0.1 --auto-skip-seconds 0.3 -1280x720 --file-filter spectests --file-filter emtests -o - | ffmpeg -y -r 60 -f image2pipe -vcodec ppm -i - -vcodec libx264 -preset ultrafast -pix_fmt yuv420p -crf 1 -threads 0 -bf 0 gource.mp4
