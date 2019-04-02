@@ -1,0 +1,7 @@
+pool:
+  vmImage: 'win1803'
+
+container: wasmer/windows-rust:rust-1.33
+
+steps:
+  - script: cargo build
