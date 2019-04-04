@@ -1,6 +1,6 @@
 use super::process::abort_with_message;
 use libc::{c_int, c_void, memcpy, size_t};
-use wasmer_runtime_core::{vm::Ctx}; // units::Pages
+use wasmer_runtime_core::vm::Ctx; // units::Pages
 
 /// emscripten: _emscripten_memcpy_big
 pub fn _emscripten_memcpy_big(ctx: &mut Ctx, dest: u32, src: u32, len: u32) -> u32 {
@@ -19,7 +19,7 @@ pub fn _emscripten_memcpy_big(ctx: &mut Ctx, dest: u32, src: u32, len: u32) -> u
 /// emscripten: _emscripten_get_heap_size
 pub fn _emscripten_get_heap_size(ctx: &mut Ctx) -> u32 {
     debug!("emscripten::_emscripten_get_heap_size");
-    debug!("=> current heap size: {}", ctx.memory(0).size().0  * 65536);
+    debug!("=> current heap size: {}", ctx.memory(0).size().0 * 65536);
     ctx.memory(0).size().0 * 65536
     // 16_777_216
 }

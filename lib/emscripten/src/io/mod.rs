@@ -30,7 +30,7 @@ pub fn sigdelset(ctx: &mut Ctx, set: i32, signum: i32) -> i32 {
     // HEAP32[((set)>>2)]=HEAP32[((set)>>2)]& (~(1 << (signum-1)));
     let val = emscripten_memory_pointer!(ctx.memory(0), set) as *mut u32;
     unsafe {
-        *val = *val & !(1 << (signum-1)); // val & ~(1 << (signum-1))
+        *val = *val & !(1 << (signum - 1)); // val & ~(1 << (signum-1))
     }
     0
 }

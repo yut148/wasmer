@@ -373,35 +373,48 @@ fn round_up(n: usize, multiple: usize) -> usize {
     (n + multiple - 1) & !(multiple - 1)
 }
 
+// Debug
+#[cfg(feature = "debug")]
 extern "C" fn i32_print(_ctx: &mut vm::Ctx, n: i32) {
-    #[cfg(feature = "debug")]
     eprint!(" i32: {},", n);
 }
+#[cfg(feature = "debug")]
 extern "C" fn i64_print(_ctx: &mut vm::Ctx, n: i64) {
-    #[cfg(feature = "debug")]
     eprint!(" i64: {},", n);
 }
+#[cfg(feature = "debug")]
 extern "C" fn f32_print(_ctx: &mut vm::Ctx, n: f32) {
-    #[cfg(feature = "debug")]
     eprint!(" f32: {},", n);
 }
+#[cfg(feature = "debug")]
 extern "C" fn f64_print(_ctx: &mut vm::Ctx, n: f64) {
-    #[cfg(feature = "debug")]
     eprint!(" f64: {},", n);
 }
+#[cfg(feature = "debug")]
 extern "C" fn start_debug(ctx: &mut vm::Ctx, func_index: u32) {
-    if cfg!(feature = "debug") {
-        if let Some(symbol_map) = unsafe { ctx.borrow_symbol_map() } {
-            if let Some(fn_name) = symbol_map.get(&func_index) {
-                eprint!("func ({} ({})), args: [", fn_name, func_index);
-                return;
-            }
+    if let Some(symbol_map) = unsafe { ctx.borrow_symbol_map() } {
+        if let Some(fn_name) = symbol_map.get(&func_index) {
+            eprint!("func ({} ({})), args: [", fn_name, func_index);
+            return;
         }
     }
-    #[cfg(feature = "debug")]
     eprint!("webassembly::debug::func - {}(", func_index);
 }
+#[cfg(feature = "debug")]
 extern "C" fn end_debug(_ctx: &mut vm::Ctx) {
-    #[cfg(feature = "debug")]
     eprintln!(")");
 }
+
+// Non debug
+#[cfg(not(feature = "debug"))]
+extern "C" fn i32_print(_ctx: &mut vm::Ctx, _n: i32) {}
+#[cfg(not(feature = "debug"))]
+extern "C" fn i64_print(_ctx: &mut vm::Ctx, _n: i64) {}
+#[cfg(not(feature = "debug"))]
+extern "C" fn f32_print(_ctx: &mut vm::Ctx, _n: f32) {}
+#[cfg(not(feature = "debug"))]
+extern "C" fn f64_print(_ctx: &mut vm::Ctx, _n: f64) {}
+#[cfg(not(feature = "debug"))]
+extern "C" fn start_debug(ctx: &mut vm::Ctx, _func_index: u32) {}
+#[cfg(not(feature = "debug"))]
+extern "C" fn end_debug(_ctx: &mut vm::Ctx) {}
