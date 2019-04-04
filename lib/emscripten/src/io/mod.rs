@@ -25,15 +25,26 @@ pub fn getprotobynumber(_ctx: &mut Ctx, _one: i32) -> i32 {
 }
 
 /// sigdelset
-pub fn sigdelset(_ctx: &mut Ctx, _one: i32, _two: i32) -> i32 {
-    debug!("emscripten::sigdelset");
-    unimplemented!()
+pub fn sigdelset(ctx: &mut Ctx, set: i32, signum: i32) -> i32 {
+    debug!("emscripten::sigdelset {} {}", set, signum);
+    // HEAP32[((set)>>2)]=HEAP32[((set)>>2)]& (~(1 << (signum-1)));
+    let val = emscripten_memory_pointer!(ctx.memory(0), set) as *mut u32;
+    unsafe {
+        *val = *val & !(1 << (signum-1)); // val & ~(1 << (signum-1))
+    }
+    0
 }
 
 /// sigfillset
-pub fn sigfillset(_ctx: &mut Ctx, _one: i32) -> i32 {
+pub fn sigfillset(ctx: &mut Ctx, set: i32) -> i32 {
     debug!("emscripten::sigfillset");
-    unimplemented!()
+    // HEAP32[((set)>>2)]=-1>>>0;
+    let val = emscripten_memory_pointer!(ctx.memory(0), set) as *mut u32;
+    unsafe {
+        *val = 4294967295; // -1>>>0
+    }
+    // unimplemented!()
+    0
 }
 
 /// tzset
