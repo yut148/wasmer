@@ -1,8 +1,9 @@
 #![cfg_attr(nightly, feature(unwind_attributes))]
 
 use wasmer_runtime_core::{
-    backend::{Compiler, CompilerConfig, Token},
+    backend::{Compiler, Token},
     cache::{Artifact, Error as CacheError},
+    config::CompileConfig,
     error::CompileError,
     module::ModuleInner,
 };
@@ -30,7 +31,7 @@ impl Compiler for LLVMCompiler {
     fn compile(
         &self,
         wasm: &[u8],
-        compiler_config: CompilerConfig,
+        compiler_config: CompileConfig,
         _: Token,
     ) -> Result<ModuleInner, CompileError> {
         validate(wasm)?;
@@ -104,7 +105,12 @@ fn validate(bytes: &[u8]) -> Result<(), CompileError> {
 fn test_read_module() {
     use std::mem::transmute;
     use wabt::wat2wasm;
-    use wasmer_runtime_core::{structures::TypedIndex, types::LocalFuncIndex, vm, vmcalls};
+    use wasmer_runtime_core::{
+        config::{Allowed, Metering},
+        structures::TypedIndex,
+        types::LocalFuncIndex,
+        vm, vmcalls,
+    };
     // let wasm = include_bytes!("../../spectests/examples/simple/simple.wasm") as &[u8];
     let wat = r#"
         (module
@@ -118,7 +124,15 @@ fn test_read_module() {
     "#;
     let wasm = wat2wasm(wat).unwrap();
 
-    let (info, code_reader) = read_info::read_module(&wasm, Default::default()).unwrap();
+    let metering = Metering::default();
+    let allowed = Allowed::default();
+    let config = CompileConfig {
+        symbol_map: None,
+        metering: &metering,
+        allowed: &allowed,
+    };
+
+    let (info, code_reader) = read_info::read_module(&wasm, config).unwrap();
 
     let (module, intrinsics) = code::parse_function_bodies(&info, code_reader).unwrap();
 

@@ -128,7 +128,7 @@ impl<'a, Data> ImportObject<'a, Data> {
         self.state_creator.as_ref()()
     }
 
-    /// Register anything that implements `LikeNamespace` as a namespace.
+    /// Register anything that implements Into<NamespaceItem> as a namespace.
     ///
     /// # Usage:
     /// ```
@@ -183,7 +183,7 @@ impl<'a, Data: 'static, InnerIter: Iterator<Item = (&'a str, Export<'a>)>>
     }
 }
 
-pub struct Namespace<'a, Data> {
+pub struct Namespace<'a, Data = ()> {
     map: HashMap<String, Export<'a>>,
     _marker: PhantomData<Data>,
 }
@@ -217,12 +217,6 @@ mod test {
 
     #[test]
     fn extending_works() {
-        let mut imports1 = imports! {
-            "dog" => {
-                "happy" => Global::new(Value::I32(0)),
-            },
-        };
-
         let imports2 = imports! {
             "dog" => {
                 "small" => Global::new(Value::I32(2)),
@@ -232,7 +226,13 @@ mod test {
             },
         };
 
-        imports1.extend(imports2);
+        let mut imports1 = imports! {
+            "dog" => {
+                "happy" => Global::new(Value::I32(0)),
+            },
+        };
+
+        imports1.extend(imports2.iter());
 
         let cat_ns = imports1.get_namespace("cat").unwrap();
         assert!(cat_ns.get_export("small").is_some());
@@ -244,19 +244,19 @@ mod test {
 
     #[test]
     fn extending_conflict_overwrites() {
-        let mut imports1 = imports! {
-            "dog" => {
-                "happy" => Global::new(Value::I32(0)),
-            },
-        };
-
         let imports2 = imports! {
             "dog" => {
                 "happy" => Global::new(Value::I32(4)),
             },
         };
 
-        imports1.extend(imports2);
+        let mut imports1 = imports! {
+            "dog" => {
+                "happy" => Global::new(Value::I32(0)),
+            },
+        };
+
+        imports1.extend(imports2.iter());
         let dog_ns = imports1.get_namespace("dog").unwrap();
 
         assert!(

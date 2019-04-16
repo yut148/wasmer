@@ -468,7 +468,7 @@ fn get_func_from_index<'a>(
             let imported_func = import_backing.imported_func(imported_func_index);
             (
                 NonNull::new(imported_func.func as *mut _).unwrap(),
-                Context::External(imported_func.vmctx),
+                Context::External(imported_func.ctx),
             )
         }
     };
