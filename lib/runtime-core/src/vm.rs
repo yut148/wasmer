@@ -1,7 +1,7 @@
 pub use crate::backing::{ImportBacking, LocalBacking};
 use crate::{
     memory::Memory,
-    module::ModuleInner,
+    module::{ModuleInner, ResourceIndex},
     structures::TypedIndex,
     types::{LocalOrImport, MemoryIndex},
 };
@@ -14,7 +14,7 @@ use hashbrown::HashMap;
 ///
 #[derive(Debug)]
 #[repr(C)]
-pub struct Ctx {
+pub struct Ctx<Data = ()> {
     // `internal` must be the first field of `Ctx`.
     pub(crate) internal: InternalCtx,
 
@@ -24,8 +24,7 @@ pub struct Ctx {
     import_backing: *mut ImportBacking,
     module: *const ModuleInner,
 
-    pub data: *mut c_void,
-    pub data_finalizer: Option<fn(data: *mut c_void)>,
+    pub data: Data,
 }
 
 /// The internal context of the currently running WebAssembly instance.
@@ -63,44 +62,12 @@ pub struct InternalCtx {
     pub dynamic_sigindices: *const SigId,
 }
 
-impl Ctx {
-    #[doc(hidden)]
-    pub unsafe fn new(
+impl<Data> Ctx<Data> {
+    pub(crate) unsafe fn new(
         local_backing: &mut LocalBacking,
         import_backing: &mut ImportBacking,
         module: &ModuleInner,
-    ) -> Self {
-        Self {
-            internal: InternalCtx {
-                memories: local_backing.vm_memories.as_mut_ptr(),
-                tables: local_backing.vm_tables.as_mut_ptr(),
-                globals: local_backing.vm_globals.as_mut_ptr(),
-
-                imported_memories: import_backing.vm_memories.as_mut_ptr(),
-                imported_tables: import_backing.vm_tables.as_mut_ptr(),
-                imported_globals: import_backing.vm_globals.as_mut_ptr(),
-                imported_funcs: import_backing.vm_functions.as_mut_ptr(),
-
-                dynamic_sigindices: local_backing.dynamic_sigindices.as_ptr(),
-            },
-            local_functions: local_backing.local_functions.as_ptr(),
-
-            local_backing,
-            import_backing,
-            module,
-
-            data: ptr::null_mut(),
-            data_finalizer: None,
-        }
-    }
-
-    #[doc(hidden)]
-    pub unsafe fn new_with_data(
-        local_backing: &mut LocalBacking,
-        import_backing: &mut ImportBacking,
-        module: &ModuleInner,
-        data: *mut c_void,
-        data_finalizer: fn(*mut c_void),
+        data: Data,
     ) -> Self {
         Self {
             internal: InternalCtx {
@@ -122,7 +89,6 @@ impl Ctx {
             module,
 
             data,
-            data_finalizer: Some(data_finalizer),
         }
     }
 
@@ -158,15 +124,10 @@ impl Ctx {
             },
         }
     }
-
-    /// Gives access to the emscripten symbol map, used for debugging
-    pub unsafe fn borrow_symbol_map(&self) -> &Option<HashMap<u32, String>> {
-        &(*self.module).info.em_symbol_map
-    }
 }
 
 #[doc(hidden)]
-impl Ctx {
+impl Ctx<()> {
     #[allow(clippy::erasing_op)] // TODO
     pub fn offset_memories() -> u8 {
         0 * (mem::size_of::<usize>() as u8)
@@ -212,12 +173,12 @@ enum InnerFunc {}
 #[repr(C)]
 pub struct Func(InnerFunc);
 
-/// An imported function, which contains the vmctx that owns this function.
+/// An imported function, which contains the ctx that owns this function.
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct ImportedFunc {
     pub func: *const Func,
-    pub vmctx: *mut Ctx,
+    pub ctx: *mut Ctx,
 }
 
 impl ImportedFunc {
@@ -226,7 +187,7 @@ impl ImportedFunc {
         0 * (mem::size_of::<usize>() as u8)
     }
 
-    pub fn offset_vmctx() -> u8 {
+    pub fn offset_ctx() -> u8 {
         1 * (mem::size_of::<usize>() as u8)
     }
 
@@ -340,7 +301,7 @@ impl Anyfunc {
         0 * (mem::size_of::<usize>() as u8)
     }
 
-    pub fn offset_vmctx() -> u8 {
+    pub fn offset_ctx() -> u8 {
         1 * (mem::size_of::<usize>() as u8)
     }
 
@@ -358,7 +319,7 @@ mod vm_offset_tests {
     use super::{Anyfunc, Ctx, ImportedFunc, InternalCtx, LocalGlobal, LocalMemory, LocalTable};
 
     #[test]
-    fn vmctx() {
+    fn ctx() {
         assert_eq!(0usize, offset_of!(Ctx => internal).get_byte_offset(),);
 
         assert_eq!(
@@ -410,8 +371,8 @@ mod vm_offset_tests {
         );
 
         assert_eq!(
-            ImportedFunc::offset_vmctx() as usize,
-            offset_of!(ImportedFunc => vmctx).get_byte_offset(),
+            ImportedFunc::offset_ctx() as usize,
+            offset_of!(ImportedFunc => ctx).get_byte_offset(),
         );
     }
 
@@ -457,7 +418,7 @@ mod vm_offset_tests {
         );
 
         assert_eq!(
-            Anyfunc::offset_vmctx() as usize,
+            Anyfunc::offset_ctx() as usize,
             offset_of!(Anyfunc => ctx).get_byte_offset(),
         );
 
@@ -570,7 +531,7 @@ mod vm_ctx_tests {
                 _func_index: FuncIndex,
                 _params: &[Value],
                 _import_backing: &ImportBacking,
-                _vmctx: *mut Ctx,
+                _ctx: *mut Ctx,
                 _: Token,
             ) -> RuntimeResult<Vec<Value>> {
                 Ok(vec![])

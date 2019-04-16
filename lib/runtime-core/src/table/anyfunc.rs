@@ -115,7 +115,7 @@ impl AnyfuncTable {
 
                     vm::Anyfunc {
                         func: func.raw(),
-                        ctx: func.instance_inner.vmctx,
+                        ctx: func.instance_inner.ctx.get() as *mut vm::Ctx,
                         sig_id,
                     }
                 }

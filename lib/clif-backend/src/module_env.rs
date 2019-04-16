@@ -7,7 +7,7 @@ use cranelift_wasm::{self, translate_module, FuncTranslator, ModuleEnvironment};
 use wasmer_runtime_core::{
     error::{CompileError, CompileResult},
     module::{
-        DataInitializer, ExportIndex, ImportName, NameIndex, NamespaceIndex, StringTableBuilder,
+        DataInitializer, ImportName, NameIndex, NamespaceIndex, ResourceIndex, StringTableBuilder,
         TableInitializer,
     },
     structures::{Map, TypedIndex},
@@ -327,14 +327,14 @@ impl<'module, 'isa, 'data> ModuleEnvironment<'data> for ModuleEnv<'module, 'isa>
     fn declare_func_export(&mut self, func_index: cranelift_wasm::FuncIndex, name: &'data str) {
         self.module.info.exports.insert(
             name.to_string(),
-            ExportIndex::Func(Converter(func_index).into()),
+            ResourceIndex::Func(Converter(func_index).into()),
         );
     }
     /// Declares a table export to the environment.
     fn declare_table_export(&mut self, table_index: cranelift_wasm::TableIndex, name: &'data str) {
         self.module.info.exports.insert(
             name.to_string(),
-            ExportIndex::Table(Converter(table_index).into()),
+            ResourceIndex::Table(Converter(table_index).into()),
         );
     }
     /// Declares a memory export to the environment.
@@ -345,7 +345,7 @@ impl<'module, 'isa, 'data> ModuleEnvironment<'data> for ModuleEnv<'module, 'isa>
     ) {
         self.module.info.exports.insert(
             name.to_string(),
-            ExportIndex::Memory(Converter(memory_index).into()),
+            ResourceIndex::Memory(Converter(memory_index).into()),
         );
     }
     /// Declares a global export to the environment.
@@ -356,7 +356,7 @@ impl<'module, 'isa, 'data> ModuleEnvironment<'data> for ModuleEnv<'module, 'isa>
     ) {
         self.module.info.exports.insert(
             name.to_string(),
-            ExportIndex::Global(Converter(global_index).into()),
+            ResourceIndex::Global(Converter(global_index).into()),
         );
     }
 

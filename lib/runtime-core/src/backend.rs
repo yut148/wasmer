@@ -1,8 +1,9 @@
 use crate::{
     backing::ImportBacking,
+    config::CompileConfig,
     error::CompileResult,
     error::RuntimeResult,
-    module::ModuleInner,
+    module::{ModuleInner, ResourceIndex},
     typed_func::Wasm,
     types::{FuncIndex, LocalFuncIndex, SigIndex, Value},
     vm,
@@ -41,28 +42,11 @@ impl Token {
     }
 }
 
-/// Configuration data for the compiler
-pub struct CompilerConfig {
-    /// Symbol information generated from emscripten; used for more detailed debug messages
-    pub symbol_map: Option<HashMap<u32, String>>,
-}
-
-impl Default for CompilerConfig {
-    fn default() -> CompilerConfig {
-        CompilerConfig { symbol_map: None }
-    }
-}
-
 pub trait Compiler {
     /// Compiles a `Module` from WebAssembly binary format.
     /// The `CompileToken` parameter ensures that this can only
     /// be called from inside the runtime.
-    fn compile(
-        &self,
-        wasm: &[u8],
-        comp_conf: CompilerConfig,
-        _: Token,
-    ) -> CompileResult<ModuleInner>;
+    fn compile(&self, wasm: &[u8], config: CompileConfig, _: Token) -> CompileResult<ModuleInner>;
 
     unsafe fn from_cache(&self, cache: Artifact, _: Token) -> Result<ModuleInner, CacheError>;
 }
@@ -96,7 +80,7 @@ pub trait ProtectedCaller: Send + Sync {
         func_index: FuncIndex,
         params: &[Value],
         import_backing: &ImportBacking,
-        vmctx: *mut vm::Ctx,
+        ctx: *mut vm::Ctx,
         _: Token,
     ) -> RuntimeResult<Vec<Value>>;
 

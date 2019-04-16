@@ -3,7 +3,7 @@ use hashbrown::HashMap;
 use wasmer_runtime_core::{
     backend::{Backend, CompilerConfig, FuncResolver, ProtectedCaller},
     module::{
-        DataInitializer, ExportIndex, ImportName, ModuleInfo, StringTable, StringTableBuilder,
+        DataInitializer, ImportName, ModuleInfo, ResourceIndex, StringTable, StringTableBuilder,
         TableInitializer,
     },
     structures::{Map, TypedIndex},
@@ -244,13 +244,17 @@ pub fn read_module<
                     let Export { field, kind, index } = export?;
 
                     let export_index = match kind {
-                        ExternalKind::Function => ExportIndex::Func(FuncIndex::new(index as usize)),
-                        ExternalKind::Table => ExportIndex::Table(TableIndex::new(index as usize)),
+                        ExternalKind::Function => {
+                            ResourceIndex::Func(FuncIndex::new(index as usize))
+                        }
+                        ExternalKind::Table => {
+                            ResourceIndex::Table(TableIndex::new(index as usize))
+                        }
                         ExternalKind::Memory => {
-                            ExportIndex::Memory(MemoryIndex::new(index as usize))
+                            ResourceIndex::Memory(MemoryIndex::new(index as usize))
                         }
                         ExternalKind::Global => {
-                            ExportIndex::Global(GlobalIndex::new(index as usize))
+                            ResourceIndex::Global(GlobalIndex::new(index as usize))
                         }
                     };
 

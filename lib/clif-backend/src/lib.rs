@@ -16,7 +16,8 @@ use target_lexicon::Triple;
 
 use wasmer_runtime_core::cache::{Artifact, Error as CacheError};
 use wasmer_runtime_core::{
-    backend::{Compiler, CompilerConfig, Token},
+    backend::{Compiler, Token},
+    config::CompileConfig,
     error::{CompileError, CompileResult},
     module::ModuleInner,
 };
@@ -42,14 +43,14 @@ impl Compiler for CraneliftCompiler {
     fn compile(
         &self,
         wasm: &[u8],
-        compiler_config: CompilerConfig,
+        compiler_config: CompileConfig,
         _: Token,
     ) -> CompileResult<ModuleInner> {
         validate(wasm)?;
 
         let isa = get_isa();
 
-        let mut module = module::Module::new(&compiler_config);
+        let mut module = module::Module::new(compiler_config);
         let module_env = module_env::ModuleEnv::new(&mut module, &*isa);
 
         let func_bodies = module_env.translate(wasm)?;

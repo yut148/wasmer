@@ -7,7 +7,7 @@ use wasmer_runtime_core::{
     backend::{ProtectedCaller, Token, UserTrapper},
     error::RuntimeResult,
     export::Context,
-    module::{ExportIndex, ModuleInfo, ModuleInner},
+    module::{ModuleInfo, ModuleInner, ResourceIndex},
     typed_func::{Wasm, WasmTrapInfo},
     types::{FuncIndex, FuncSig, LocalOrImport, SigIndex, Type, Value},
     vm::{self, ImportBacking},
@@ -52,7 +52,7 @@ impl Caller {
     ) -> Self {
         let mut func_export_set = HashSet::new();
         for export_index in module.exports.values() {
-            if let ExportIndex::Func(func_index) = export_index {
+            if let ResourceIndex::Func(func_index) = export_index {
                 func_export_set.insert(*func_index);
             }
         }
@@ -218,7 +218,7 @@ fn get_func_from_index<'a>(
             let imported_func = import_backing.imported_func(imported_func_index);
             (
                 NonNull::new(imported_func.func as *mut _).unwrap(),
-                Context::External(imported_func.vmctx),
+                Context::External(imported_func.ctx),
             )
         }
     };

@@ -107,8 +107,8 @@ impl Global {
     }
 }
 
-impl IsExport for Global {
-    fn to_export(&self) -> Export {
+impl<'a, Data> IsExport<'a, Data> for Global {
+    fn to_export(&self) -> Export<'a> {
         Export::Global(self.clone())
     }
 }

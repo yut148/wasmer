@@ -36,8 +36,9 @@ fn foobar(_ctx: &mut Ctx) -> i32 {
     42
 }
 
-fn do_panic(_ctx: &mut Ctx) -> Result<i32, String> {
-    Err("error".to_string())
+fn do_panic(ctx: &mut Ctx<usize>) -> Result<i32, String> {
+    println!("the number was {}", ctx.data);
+    Err("test error".to_string())
 }
 
 fn main() -> Result<(), error::Error> {
@@ -53,11 +54,14 @@ fn main() -> Result<(), error::Error> {
     // };
 
     println!("instantiating");
-    let instance = module.instantiate(&imports! {
-      "env" => {
-          "do_panic" => Func::new(do_panic),
-      },
-    })?;
+    let imports = imports! {
+        || 42,
+        "env" => {
+            "do_panic" => Func::new(do_panic),
+        },
+    };
+
+    let instance = module.instantiate(&imports)?;
 
     let foo = instance.dyn_func("dbz")?;
 

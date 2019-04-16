@@ -111,9 +111,13 @@ pub mod units {
     pub use wasmer_runtime_core::units::{Bytes, Pages};
 }
 
+pub mod backends;
+mod builder;
 pub mod cache;
 
-use wasmer_runtime_core::backend::{Compiler, CompilerConfig};
+use wasmer_runtime_core::{backend::Compiler, config::CompileConfig};
+
+pub use self::builder::*;
 
 /// Compile WebAssembly binary code into a [`Module`].
 /// This function is useful if it is necessary to
@@ -136,7 +140,7 @@ pub fn compile(wasm: &[u8]) -> error::CompileResult<Module> {
 /// changing the compiler's behavior
 pub fn compile_with_config(
     wasm: &[u8],
-    compiler_config: CompilerConfig,
+    compiler_config: CompileConfig,
 ) -> error::CompileResult<Module> {
     wasmer_runtime_core::compile_with_config(&wasm[..], default_compiler(), compiler_config)
 }
@@ -145,7 +149,7 @@ pub fn compile_with_config(
 /// changing the backend.
 pub fn compile_with_config_with(
     wasm: &[u8],
-    compiler_config: CompilerConfig,
+    compiler_config: CompileConfig,
     compiler: &dyn Compiler,
 ) -> error::CompileResult<Module> {
     wasmer_runtime_core::compile_with_config(&wasm[..], compiler, compiler_config)
@@ -169,7 +173,10 @@ pub fn compile_with_config_with(
 /// `error::CompileError`, `error::LinkError`, or
 /// `error::RuntimeError` (all combined into an `error::Error`),
 /// depending on the cause of the failure.
-pub fn instantiate(wasm: &[u8], import_object: &ImportObject) -> error::Result<Instance> {
+pub fn instantiate<'imports, Data>(
+    wasm: &[u8],
+    import_object: &'imports ImportObject<Data>,
+) -> error::Result<Instance<'imports, Data>> {
     let module = compile(wasm)?;
     module.instantiate(import_object)
 }

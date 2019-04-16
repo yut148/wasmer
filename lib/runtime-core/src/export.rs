@@ -1,8 +1,9 @@
 use crate::{
-    global::Global, instance::InstanceInner, memory::Memory, module::ExportIndex,
-    module::ModuleInner, table::Table, types::FuncSig, vm,
+    global::Global, instance::InstanceInner, memory::Memory, module::ModuleInner,
+    module::ResourceIndex, table::Table, types::FuncSig, vm,
 };
 use hashbrown::hash_map;
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 #[derive(Debug, Copy, Clone)]
@@ -12,11 +13,12 @@ pub enum Context {
 }
 
 #[derive(Debug, Clone)]
-pub enum Export {
+pub enum Export<'a> {
     Function {
         func: FuncPointer,
         ctx: Context,
         signature: Arc<FuncSig>,
+        _marker: PhantomData<&'a ()>,
     },
     Memory(Memory),
     Table(Table),
@@ -39,14 +41,14 @@ impl FuncPointer {
     }
 }
 
-pub struct ExportIter<'a> {
-    inner: &'a InstanceInner,
-    iter: hash_map::Iter<'a, String, ExportIndex>,
+pub struct ExportIter<'a, Data = ()> {
+    inner: &'a InstanceInner<Data>,
+    iter: hash_map::Iter<'a, String, ResourceIndex>,
     module: &'a ModuleInner,
 }
 
-impl<'a> ExportIter<'a> {
-    pub(crate) fn new(module: &'a ModuleInner, inner: &'a InstanceInner) -> Self {
+impl<'a, Data> ExportIter<'a, Data> {
+    pub(crate) fn new(module: &'a ModuleInner, inner: &'a InstanceInner<Data>) -> Self {
         Self {
             inner,
             iter: module.info.exports.iter(),
@@ -55,13 +57,18 @@ impl<'a> ExportIter<'a> {
     }
 }
 
-impl<'a> Iterator for ExportIter<'a> {
-    type Item = (String, Export);
-    fn next(&mut self) -> Option<(String, Export)> {
+impl<'a, Data> Iterator for ExportIter<'a, Data> {
+    type Item = (&'a str, Export<'a>);
+    fn next(&mut self) -> Option<(&'a str, Export<'a>)> {
         let (name, export_index) = self.iter.next()?;
         Some((
-            name.clone(),
+            name,
             self.inner.get_export_from_index(&self.module, export_index),
         ))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let num_exports = self.module.info.exports.len();
+        (num_exports, Some(num_exports))
     }
 }

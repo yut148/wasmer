@@ -13,7 +13,7 @@ use crate::{
 use libc::{c_int, uint32_t};
 use std::{ptr, slice};
 use wasmer_runtime::{Instance, Memory, Module, Value};
-use wasmer_runtime_core::{export::Export, module::ExportIndex};
+use wasmer_runtime_core::{export::Export, module::ResourceIndex};
 
 #[repr(C)]
 #[derive(Clone)]
@@ -413,13 +413,13 @@ pub unsafe extern "C" fn wasmer_export_func_call(
     }
 }
 
-impl From<(&std::string::String, &ExportIndex)> for NamedExportDescriptor {
-    fn from((name, export_index): (&String, &ExportIndex)) -> Self {
+impl From<(&std::string::String, &ResourceIndex)> for NamedExportDescriptor {
+    fn from((name, export_index): (&String, &ResourceIndex)) -> Self {
         let kind = match *export_index {
-            ExportIndex::Memory(_) => wasmer_import_export_kind::WASM_MEMORY,
-            ExportIndex::Global(_) => wasmer_import_export_kind::WASM_GLOBAL,
-            ExportIndex::Table(_) => wasmer_import_export_kind::WASM_TABLE,
-            ExportIndex::Func(_) => wasmer_import_export_kind::WASM_FUNCTION,
+            ResourceIndex::Memory(_) => wasmer_import_export_kind::WASM_MEMORY,
+            ResourceIndex::Global(_) => wasmer_import_export_kind::WASM_GLOBAL,
+            ResourceIndex::Table(_) => wasmer_import_export_kind::WASM_TABLE,
+            ResourceIndex::Func(_) => wasmer_import_export_kind::WASM_FUNCTION,
         };
         NamedExportDescriptor {
             name: name.clone(),

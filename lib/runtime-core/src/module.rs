@@ -43,7 +43,7 @@ pub struct ModuleInfo {
     pub imported_tables: Map<ImportedTableIndex, (ImportName, TableDescriptor)>,
     pub imported_globals: Map<ImportedGlobalIndex, (ImportName, GlobalDescriptor)>,
 
-    pub exports: HashMap<String, ExportIndex>,
+    pub exports: HashMap<String, ResourceIndex>,
 
     pub data_initializers: Vec<DataInitializer>,
     pub elem_initializers: Vec<TableInitializer>,
@@ -56,9 +56,6 @@ pub struct ModuleInfo {
 
     pub namespace_table: StringTable<NamespaceIndex>,
     pub name_table: StringTable<NameIndex>,
-
-    /// Symbol information from emscripten
-    pub em_symbol_map: Option<HashMap<u32, String>>,
 
     pub custom_sections: HashMap<String, Vec<u8>>,
 }
@@ -123,7 +120,10 @@ impl Module {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn instantiate(&self, import_object: &ImportObject) -> error::Result<Instance> {
+    pub fn instantiate<'imports, Data>(
+        &self,
+        import_object: &'imports ImportObject<Data>,
+    ) -> error::Result<Instance<'imports, Data>> {
         Instance::new(Arc::clone(&self.inner), import_object)
     }
 
@@ -155,7 +155,7 @@ pub struct ImportName {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ExportIndex {
+pub enum ResourceIndex {
     Func(FuncIndex),
     Memory(MemoryIndex),
     Global(GlobalIndex),

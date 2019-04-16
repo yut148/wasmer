@@ -44,15 +44,19 @@ macro_rules! func {
 ///     },
 /// };
 ///
+/// fn foo(ctx: &mut Ctx, n: i32) -> i32 {
+///     n
+/// }
+///
 /// let imports_with_state = imports! {
-///     || (0 as _, |_a| {}),
+///     || 42i32,
 ///     "env" => {
-///         "foo" => func!(foo),
+///         "foo" => func!(foo_with_state),
 ///     },
 /// };
 ///
-/// fn foo(_: &mut Ctx, n: i32) -> i32 {
-///     n
+/// fn foo_with_state(ctx: &mut Ctx<i32>, n: i32) -> i32 {
+///     n + ctx.data
 /// }
 /// ```
 #[macro_export]

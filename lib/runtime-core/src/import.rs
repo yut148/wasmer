@@ -1,24 +1,81 @@
-use crate::export::Export;
-use hashbrown::{hash_map::Entry, HashMap};
+use crate::export::{Export, ExportIter};
+use crate::instance::Instance;
+use hashbrown::{
+    hash_map::{Entry, Iter as HashMapIter},
+    HashMap,
+};
 use std::collections::VecDeque;
 use std::{
     cell::{Ref, RefCell},
     ffi::c_void,
+    marker::PhantomData,
     rc::Rc,
 };
 
-pub trait LikeNamespace {
-    fn get_export(&self, name: &str) -> Option<Export>;
-    fn get_exports(&self) -> Vec<(String, Export)>;
-    fn maybe_insert(&mut self, name: &str, export: Export) -> Option<()>;
+pub enum NamespaceItem<'a, Data = ()> {
+    Instance(Instance<'a, Data>),
+    Namespace(Namespace<'a, Data>),
 }
 
-pub trait IsExport {
-    fn to_export(&self) -> Export;
+impl<'a, Data> NamespaceItem<'a, Data> {
+    pub fn get_export(&self, name: &str) -> Option<Export> {
+        match self {
+            NamespaceItem::Instance(instance) => instance.export(name),
+            NamespaceItem::Namespace(namespace) => namespace.get_export(name),
+        }
+    }
+
+    pub fn exports(&self) -> impl Iterator<Item = (&str, Export)> {
+        enum Iter<'a, Data> {
+            Inst(ExportIter<'a, Data>),
+            Ns(HashMapIter<'a, String, Export<'a>>),
+        }
+
+        impl<'a, Data> Iterator for Iter<'a, Data> {
+            type Item = (&'a str, Export<'a>);
+            fn next(&mut self) -> Option<Self::Item> {
+                match self {
+                    Iter::Inst(iter) => iter.next(),
+                    Iter::Ns(ns) => ns.next().map(|(name, export)| (&**name, export.clone())),
+                }
+            }
+        }
+
+        match self {
+            NamespaceItem::Instance(inst) => Iter::Inst(inst.exports()),
+            NamespaceItem::Namespace(ns) => Iter::Ns(ns.map.iter()),
+        }
+    }
+
+    pub fn try_insert(&mut self, name: impl Into<String>, export: Export<'a>) -> Result<(), ()> {
+        match self {
+            NamespaceItem::Instance(_) => Err(()),
+            NamespaceItem::Namespace(ns) => {
+                ns.insert(name, export);
+                Ok(())
+            }
+        }
+    }
 }
 
-impl IsExport for Export {
-    fn to_export(&self) -> Export {
+impl<'a, Data> From<Instance<'a, Data>> for NamespaceItem<'a, Data> {
+    fn from(instance: Instance<'a, Data>) -> Self {
+        NamespaceItem::Instance(instance)
+    }
+}
+
+impl<'a, Data> From<Namespace<'a, Data>> for NamespaceItem<'a, Data> {
+    fn from(namespace: Namespace<'a, Data>) -> Self {
+        NamespaceItem::Namespace(namespace)
+    }
+}
+
+pub trait IsExport<'a, Data> {
+    fn to_export(&self) -> Export<'a>;
+}
+
+impl<'a, Data> IsExport<'a, Data> for Export<'a> {
+    fn to_export(&self) -> Export<'a> {
         self.clone()
     }
 }
@@ -44,32 +101,31 @@ impl IsExport for Export {
 ///     n
 /// }
 /// ```
-pub struct ImportObject {
-    map: Rc<RefCell<HashMap<String, Box<dyn LikeNamespace>>>>,
-    state_creator: Option<Rc<Fn() -> (*mut c_void, fn(*mut c_void))>>,
+pub struct ImportObject<'a, Data = ()> {
+    map: HashMap<String, NamespaceItem<'a, Data>>,
+    state_creator: Rc<dyn Fn() -> Data>,
 }
 
-impl ImportObject {
+impl<'a> ImportObject<'a, ()> {
     /// Create a new `ImportObject`.  
     pub fn new() -> Self {
         Self {
-            map: Rc::new(RefCell::new(HashMap::new())),
-            state_creator: None,
+            map: HashMap::new(),
+            state_creator: Rc::new(|| ()),
         }
     }
+}
 
-    pub fn new_with_data<F>(state_creator: F) -> Self
-    where
-        F: Fn() -> (*mut c_void, fn(*mut c_void)) + 'static,
-    {
+impl<'a, Data> ImportObject<'a, Data> {
+    pub fn new_with_data(state_creator: impl Fn() -> Data + 'static) -> Self {
         Self {
-            map: Rc::new(RefCell::new(HashMap::new())),
-            state_creator: Some(Rc::new(state_creator)),
+            map: HashMap::new(),
+            state_creator: Rc::new(state_creator),
         }
     }
 
-    pub(crate) fn call_state_creator(&self) -> Option<(*mut c_void, fn(*mut c_void))> {
-        self.state_creator.as_ref().map(|state_gen| state_gen())
+    pub(crate) fn create_state(&self) -> Data {
+        self.state_creator.as_ref()()
     }
 
     /// Register anything that implements `LikeNamespace` as a namespace.
@@ -86,122 +142,70 @@ impl ImportObject {
     ///     // ...
     /// }
     /// ```
-    pub fn register<S, N>(&mut self, name: S, namespace: N) -> Option<Box<dyn LikeNamespace>>
+    pub fn register<S, N>(&mut self, name: S, namespace: N) -> Option<NamespaceItem<'a, Data>>
     where
         S: Into<String>,
-        N: LikeNamespace + 'static,
+        N: Into<NamespaceItem<'a, Data>>,
     {
-        let mut map = self.map.borrow_mut();
-
-        match map.entry(name.into()) {
+        match self.map.entry(name.into()) {
             Entry::Vacant(empty) => {
-                empty.insert(Box::new(namespace));
+                empty.insert(namespace.into());
                 None
             }
-            Entry::Occupied(mut occupied) => Some(occupied.insert(Box::new(namespace))),
+            Entry::Occupied(mut occupied) => Some(occupied.insert(namespace.into())),
         }
     }
 
-    pub fn get_namespace(&self, namespace: &str) -> Option<Ref<dyn LikeNamespace + 'static>> {
-        let map_ref = self.map.borrow();
-
-        if map_ref.contains_key(namespace) {
-            Some(Ref::map(map_ref, |map| &*map[namespace]))
-        } else {
-            None
-        }
+    pub fn get_namespace(&self, namespace: &str) -> Option<&NamespaceItem<'a, Data>> {
+        self.map.get(namespace)
     }
 
-    pub fn clone_ref(&self) -> Self {
-        Self {
-            map: Rc::clone(&self.map),
-            state_creator: self.state_creator.clone(),
-        }
-    }
-
-    fn get_objects(&self) -> VecDeque<(String, String, Export)> {
-        let mut out = VecDeque::new();
-        for (name, ns) in self.map.borrow().iter() {
-            for (id, exp) in ns.get_exports() {
-                out.push_back((name.clone(), id, exp));
-            }
-        }
-        out
+    pub fn iter(&self) -> impl Iterator<Item = (&str, impl Iterator<Item = (&str, Export)>)> {
+        self.map.iter().map(|(name, ns)| (&**name, ns.exports()))
     }
 }
 
-pub struct ImportObjectIterator {
-    elements: VecDeque<(String, String, Export)>,
-}
-
-impl Iterator for ImportObjectIterator {
-    type Item = (String, String, Export);
-    fn next(&mut self) -> Option<Self::Item> {
-        self.elements.pop_front()
-    }
-}
-
-impl IntoIterator for ImportObject {
-    type IntoIter = ImportObjectIterator;
-    type Item = (String, String, Export);
-
-    fn into_iter(self) -> Self::IntoIter {
-        ImportObjectIterator {
-            elements: self.get_objects(),
-        }
-    }
-}
-
-impl Extend<(String, String, Export)> for ImportObject {
-    fn extend<T: IntoIterator<Item = (String, String, Export)>>(&mut self, iter: T) {
-        let mut map = self.map.borrow_mut();
-        for (ns, id, exp) in iter.into_iter() {
-            if let Some(like_ns) = map.get_mut(&ns) {
-                like_ns.maybe_insert(&id, exp);
-            } else {
-                let mut new_ns = Namespace::new();
-                new_ns.insert(id, exp);
-                map.insert(ns, Box::new(new_ns));
+impl<'a, Data: 'static, InnerIter: Iterator<Item = (&'a str, Export<'a>)>>
+    Extend<(&'a str, InnerIter)> for ImportObject<'a, Data>
+{
+    fn extend<T: IntoIterator<Item = (&'a str, InnerIter)>>(&mut self, iter: T) {
+        for (ns, inner_iter) in iter.into_iter() {
+            for (field, export) in inner_iter {
+                if let Some(like_ns) = self.map.get_mut(ns) {
+                    let _ = like_ns.try_insert(field.to_string(), export);
+                } else {
+                    let mut new_ns = Namespace::new();
+                    new_ns.insert(field.to_string(), export);
+                    self.map.insert(ns.to_string(), new_ns.into());
+                }
             }
         }
     }
 }
 
-pub struct Namespace {
-    map: HashMap<String, Box<dyn IsExport>>,
+pub struct Namespace<'a, Data> {
+    map: HashMap<String, Export<'a>>,
+    _marker: PhantomData<Data>,
 }
 
-impl Namespace {
+impl<'a, Data> Namespace<'a, Data> {
     pub fn new() -> Self {
         Self {
             map: HashMap::new(),
+            _marker: PhantomData,
         }
     }
 
-    pub fn insert<S, E>(&mut self, name: S, export: E) -> Option<Box<dyn IsExport>>
+    pub fn insert<S, E>(&mut self, name: S, export: E) -> Option<Export<'a>>
     where
         S: Into<String>,
-        E: IsExport + 'static,
+        E: IsExport<'a, Data>,
     {
-        self.map.insert(name.into(), Box::new(export))
-    }
-}
-
-impl LikeNamespace for Namespace {
-    fn get_export(&self, name: &str) -> Option<Export> {
-        self.map.get(name).map(|is_export| is_export.to_export())
+        self.map.insert(name.into(), export.to_export())
     }
 
-    fn get_exports(&self) -> Vec<(String, Export)> {
-        self.map
-            .iter()
-            .map(|(k, v)| (k.clone(), v.to_export()))
-            .collect()
-    }
-
-    fn maybe_insert(&mut self, name: &str, export: Export) -> Option<()> {
-        self.map.insert(name.to_owned(), Box::new(export));
-        Some(())
+    fn get_export(&'a self, name: &str) -> Option<Export<'a>> {
+        self.map.get(name).cloned()
     }
 }
 

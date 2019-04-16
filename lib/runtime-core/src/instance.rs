@@ -4,30 +4,37 @@ use crate::{
     error::{CallError, CallResult, ResolveError, ResolveResult, Result},
     export::{Context, Export, ExportIter, FuncPointer},
     global::Global,
-    import::{ImportObject, LikeNamespace},
+    import::ImportObject,
     memory::Memory,
-    module::{ExportIndex, Module, ModuleInner},
+    module::{Module, ModuleInner, ResourceIndex},
     sig_registry::SigRegistry,
     table::Table,
     typed_func::{Func, Wasm, WasmTypeList},
     types::{FuncIndex, FuncSig, GlobalIndex, LocalOrImport, MemoryIndex, TableIndex, Value},
     vm,
 };
-use std::{mem, ptr::NonNull, sync::Arc};
+use std::{
+    cell::UnsafeCell,
+    marker::PhantomData,
+    mem::{self, ManuallyDrop},
+    pin::Pin,
+    ptr::NonNull,
+    sync::Arc,
+};
 
-pub(crate) struct InstanceInner {
+pub(crate) struct InstanceInner<Data> {
     #[allow(dead_code)]
     pub(crate) backing: LocalBacking,
     import_backing: ImportBacking,
-    pub(crate) vmctx: *mut vm::Ctx,
+    pub(crate) ctx: UnsafeCell<vm::Ctx<Data>>,
 }
 
-impl Drop for InstanceInner {
-    fn drop(&mut self) {
-        // Drop the vmctx.
-        unsafe { Box::from_raw(self.vmctx) };
-    }
-}
+// impl Drop for InstanceInner {
+//     fn drop(&mut self) {
+//         // Drop the ctx.
+//         unsafe { Box::from_raw(self.ctx) };
+//     }
+// }
 
 /// An instantiated WebAssembly module.
 ///
@@ -36,49 +43,51 @@ impl Drop for InstanceInner {
 /// ready to be called.
 ///
 /// [`ImportObject`]: struct.ImportObject.html
-pub struct Instance {
+pub struct Instance<'imports, Data = ()> {
     module: Arc<ModuleInner>,
-    inner: Box<InstanceInner>,
-    #[allow(dead_code)]
-    import_object: ImportObject,
+    inner: Pin<Box<InstanceInner<Data>>>,
+    _phantom: PhantomData<&'imports ()>,
 }
 
-impl Instance {
-    pub(crate) fn new(module: Arc<ModuleInner>, imports: &ImportObject) -> Result<Instance> {
+impl<'imports, Data> Instance<'imports, Data> {
+    pub(crate) fn new(
+        module: Arc<ModuleInner>,
+        import_object: &'imports ImportObject<Data>,
+    ) -> Result<Instance<'imports, Data>> {
         // We need the backing and import_backing to create a vm::Ctx, but we need
         // a vm::Ctx to create a backing and an import_backing. The solution is to create an
-        // uninitialized vm::Ctx and then initialize it in-place.
-        let mut vmctx = unsafe { Box::new(mem::uninitialized()) };
+        // uninitialized InstanceInner on the heap and then initialize it in-place.
+        let inner: Pin<Box<InstanceInner<Data>>> = unsafe {
+            // The InstanceInner is wrapped in a ManuallyDrop to ensure that if we prematurely
+            // exit from this function, we don't attempt to free uninitialized memory.
+            let mut inner: Box<ManuallyDrop<InstanceInner<Data>>> =
+                Box::new(ManuallyDrop::new(mem::uninitialized()));
+            let ctx_ptr = inner.ctx.get();
 
-        let import_backing = ImportBacking::new(&module, &imports, &mut *vmctx)?;
-        let backing = LocalBacking::new(&module, &import_backing, &mut *vmctx);
+            let mut import_backing = ImportBacking::new(&module, import_object, ctx_ptr as *mut _)?;
+            let mut backing = LocalBacking::new(&module, &import_backing, ctx_ptr as *mut _);
 
-        // When Pin is stablized, this will use `Box::pinned` instead of `Box::new`.
-        let mut inner = Box::new(InstanceInner {
-            backing,
-            import_backing,
-            vmctx: Box::leak(vmctx),
-        });
+            let real_ctx = vm::Ctx::new(
+                &mut backing,
+                &mut import_backing,
+                &module,
+                import_object.create_state(),
+            );
 
-        // Initialize the vm::Ctx in-place after the backing
-        // has been boxed.
-        unsafe {
-            *inner.vmctx = match imports.call_state_creator() {
-                Some((data, dtor)) => vm::Ctx::new_with_data(
-                    &mut inner.backing,
-                    &mut inner.import_backing,
-                    &module,
-                    data,
-                    dtor,
-                ),
-                None => vm::Ctx::new(&mut inner.backing, &mut inner.import_backing, &module),
-            };
+            // Write into the InstanceInner without dropping the uninitilized fields.
+            (&mut inner.backing as *mut LocalBacking).write(backing);
+            (&mut inner.import_backing as *mut ImportBacking).write(import_backing);
+            (&mut inner.ctx as *mut UnsafeCell<vm::Ctx<Data>>).write(UnsafeCell::new(real_ctx));
+
+            let pinned: Pin<_> = inner.into();
+            // Turn this into a normal box (without the ManuallyDrop).
+            mem::transmute(pinned)
         };
 
         let instance = Instance {
             module,
             inner,
-            import_object: imports.clone_ref(),
+            _phantom: PhantomData,
         };
 
         if let Some(start_index) = instance.module.info.start_func {
@@ -107,7 +116,7 @@ impl Instance {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn func<Args, Rets>(&self, name: &str) -> ResolveResult<Func<Args, Rets, Wasm>>
+    pub fn func<Args, Rets>(&self, name: &str) -> ResolveResult<Func<Args, Rets, Data, Wasm>>
     where
         Args: WasmTypeList,
         Rets: WasmTypeList,
@@ -121,7 +130,7 @@ impl Instance {
                     name: name.to_string(),
                 })?;
 
-        if let ExportIndex::Func(func_index) = export_index {
+        if let ResourceIndex::Func(func_index) = export_index {
             let sig_index = *self
                 .module
                 .info
@@ -139,9 +148,9 @@ impl Instance {
             }
 
             let ctx = match func_index.local_or_import(&self.module.info) {
-                LocalOrImport::Local(_) => self.inner.vmctx,
+                LocalOrImport::Local(_) => self.inner.ctx.get(),
                 LocalOrImport::Import(imported_func_index) => {
-                    self.inner.import_backing.vm_functions[imported_func_index].vmctx
+                    self.inner.import_backing.vm_functions[imported_func_index].ctx as *mut _
                 }
             };
 
@@ -163,7 +172,7 @@ impl Instance {
                 .unwrap(),
             };
 
-            let typed_func: Func<Args, Rets, Wasm> =
+            let typed_func: Func<Args, Rets, Data, Wasm> =
                 unsafe { Func::from_raw_parts(func_wasm_inner, func_ptr, ctx) };
 
             Ok(typed_func)
@@ -189,7 +198,7 @@ impl Instance {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn dyn_func(&self, name: &str) -> ResolveResult<DynFunc> {
+    pub fn dyn_func(&self, name: &str) -> ResolveResult<DynFunc<Data>> {
         let export_index =
             self.module
                 .info
@@ -199,7 +208,7 @@ impl Instance {
                     name: name.to_string(),
                 })?;
 
-        if let ExportIndex::Func(func_index) = export_index {
+        if let ResourceIndex::Func(func_index) = export_index {
             let sig_index = *self
                 .module
                 .info
@@ -212,7 +221,7 @@ impl Instance {
             Ok(DynFunc {
                 signature,
                 module: &self.module,
-                instance_inner: &self.inner,
+                instance_inner: &*self.inner,
                 func_index: *func_index,
             })
         } else {
@@ -255,7 +264,7 @@ impl Instance {
                     name: name.to_string(),
                 })?;
 
-        let func_index = if let ExportIndex::Func(func_index) = export_index {
+        let func_index = if let ResourceIndex::Func(func_index) = export_index {
             *func_index
         } else {
             return Err(CallError::Resolve(ResolveError::ExportWrongType {
@@ -271,22 +280,31 @@ impl Instance {
     /// [`Ctx`] used by this Instance.
     ///
     /// [`Ctx`]: struct.Ctx.html
-    pub fn context(&self) -> &vm::Ctx {
-        unsafe { &*self.inner.vmctx }
+    pub fn context(&self) -> &vm::Ctx<Data> {
+        unsafe { &*self.inner.ctx.get() }
     }
 
     /// Returns a mutable reference to the
     /// [`Ctx`] used by this Instance.
     ///
     /// [`Ctx`]: struct.Ctx.html
-    pub fn context_mut(&mut self) -> &mut vm::Ctx {
-        unsafe { &mut *self.inner.vmctx }
+    pub fn context_mut(&mut self) -> &mut vm::Ctx<Data> {
+        unsafe { &mut *self.inner.ctx.get() }
     }
 
     /// Returns an iterator over all of the items
     /// exported from this instance.
-    pub fn exports(&self) -> ExportIter {
+    pub fn exports(&self) -> ExportIter<Data> {
         ExportIter::new(&self.module, &self.inner)
+    }
+
+    pub fn export(&self, name: &str) -> Option<Export> {
+        let export_index = self.module.info.exports.get(name)?;
+
+        Some(
+            self.inner
+                .get_export_from_index(&*self.module, export_index),
+        )
     }
 
     /// The module used to instantiate this Instance.
@@ -295,7 +313,7 @@ impl Instance {
     }
 }
 
-impl Instance {
+impl<'imports, Data> Instance<'imports, Data> {
     fn call_with_index(&self, func_index: FuncIndex, args: &[Value]) -> CallResult<Vec<Value>> {
         let sig_index = *self
             .module
@@ -312,10 +330,10 @@ impl Instance {
             })?
         }
 
-        let vmctx = match func_index.local_or_import(&self.module.info) {
-            LocalOrImport::Local(_) => self.inner.vmctx,
+        let ctx = match func_index.local_or_import(&self.module.info) {
+            LocalOrImport::Local(_) => self.inner.ctx.get() as *mut vm::Ctx,
             LocalOrImport::Import(imported_func_index) => {
-                self.inner.import_backing.vm_functions[imported_func_index].vmctx
+                self.inner.import_backing.vm_functions[imported_func_index].ctx
             }
         };
 
@@ -326,7 +344,7 @@ impl Instance {
             func_index,
             args,
             &self.inner.import_backing,
-            vmctx,
+            ctx,
             token,
         )?;
 
@@ -334,34 +352,35 @@ impl Instance {
     }
 }
 
-impl InstanceInner {
+impl<Data> InstanceInner<Data> {
     pub(crate) fn get_export_from_index(
         &self,
         module: &ModuleInner,
-        export_index: &ExportIndex,
+        export_index: &ResourceIndex,
     ) -> Export {
         match export_index {
-            ExportIndex::Func(func_index) => {
+            ResourceIndex::Func(func_index) => {
                 let (func, ctx, signature) = self.get_func_from_index(module, *func_index);
 
                 Export::Function {
                     func,
                     ctx: match ctx {
-                        Context::Internal => Context::External(self.vmctx),
+                        Context::Internal => Context::External(self.ctx.get() as *mut vm::Ctx),
                         ctx @ Context::External(_) => ctx,
                     },
                     signature,
+                    _marker: PhantomData,
                 }
             }
-            ExportIndex::Memory(memory_index) => {
+            ResourceIndex::Memory(memory_index) => {
                 let memory = self.get_memory_from_index(module, *memory_index);
                 Export::Memory(memory)
             }
-            ExportIndex::Global(global_index) => {
+            ResourceIndex::Global(global_index) => {
                 let global = self.get_global_from_index(module, *global_index);
                 Export::Global(global)
             }
-            ExportIndex::Table(table_index) => {
+            ResourceIndex::Table(table_index) => {
                 let table = self.get_table_from_index(module, *table_index);
                 Export::Table(table)
             }
@@ -393,7 +412,7 @@ impl InstanceInner {
                 let imported_func = &self.import_backing.vm_functions[imported_func_index];
                 (
                     imported_func.func as *const _,
-                    Context::External(imported_func.vmctx),
+                    Context::External(imported_func.ctx),
                 )
             }
         };
@@ -436,31 +455,15 @@ impl InstanceInner {
     }
 }
 
-impl LikeNamespace for Instance {
-    fn get_export(&self, name: &str) -> Option<Export> {
-        let export_index = self.module.info.exports.get(name)?;
-
-        Some(self.inner.get_export_from_index(&self.module, export_index))
-    }
-
-    fn get_exports(&self) -> Vec<(String, Export)> {
-        unimplemented!("Use the exports method instead");
-    }
-
-    fn maybe_insert(&mut self, _name: &str, _export: Export) -> Option<()> {
-        None
-    }
-}
-
 /// A representation of an exported WebAssembly function.
-pub struct DynFunc<'a> {
+pub struct DynFunc<'a, Data = ()> {
     pub(crate) signature: Arc<FuncSig>,
     module: &'a ModuleInner,
-    pub(crate) instance_inner: &'a InstanceInner,
+    pub(crate) instance_inner: &'a InstanceInner<Data>,
     func_index: FuncIndex,
 }
 
-impl<'a> DynFunc<'a> {
+impl<'a, Data> DynFunc<'a, Data> {
     /// Call an exported webassembly function safely.
     ///
     /// Pass arguments by wrapping each one in the [`Value`] enum.
@@ -491,10 +494,10 @@ impl<'a> DynFunc<'a> {
             })?
         }
 
-        let vmctx = match self.func_index.local_or_import(&self.module.info) {
-            LocalOrImport::Local(_) => self.instance_inner.vmctx,
+        let ctx = match self.func_index.local_or_import(&self.module.info) {
+            LocalOrImport::Local(_) => self.instance_inner.ctx.get() as *mut vm::Ctx,
             LocalOrImport::Import(imported_func_index) => {
-                self.instance_inner.import_backing.vm_functions[imported_func_index].vmctx
+                self.instance_inner.import_backing.vm_functions[imported_func_index].ctx
             }
         };
 
@@ -505,7 +508,7 @@ impl<'a> DynFunc<'a> {
             self.func_index,
             params,
             &self.instance_inner.import_backing,
-            vmctx,
+            ctx,
             token,
         )?;
 
@@ -528,12 +531,5 @@ impl<'a> DynFunc<'a> {
                 self.instance_inner.import_backing.vm_functions[import_func_index].func
             }
         }
-    }
-}
-
-#[doc(hidden)]
-impl Instance {
-    pub fn memory_offset_addr(&self, _: u32, _: usize) -> *const u8 {
-        unimplemented!()
     }
 }

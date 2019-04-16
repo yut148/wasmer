@@ -126,8 +126,8 @@ impl Table {
     }
 }
 
-impl IsExport for Table {
-    fn to_export(&self) -> Export {
+impl<'a, Data> IsExport<'a, Data> for Table {
+    fn to_export(&self) -> Export<'a> {
         Export::Table(self.clone())
     }
 }

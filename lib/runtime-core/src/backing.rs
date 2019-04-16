@@ -15,7 +15,7 @@ use crate::{
     },
     vm,
 };
-use std::slice;
+use std::{marker::PhantomData, slice};
 
 #[derive(Debug)]
 pub struct LocalBacking {
@@ -42,13 +42,13 @@ pub struct LocalBacking {
 // }
 
 impl LocalBacking {
-    pub(crate) fn new(module: &ModuleInner, imports: &ImportBacking, vmctx: *mut vm::Ctx) -> Self {
+    pub(crate) fn new(module: &ModuleInner, imports: &ImportBacking, ctx: *mut vm::Ctx) -> Self {
         let mut memories = Self::generate_memories(module);
         let mut tables = Self::generate_tables(module);
         let mut globals = Self::generate_globals(module, imports);
 
         let vm_memories = Self::finalize_memories(module, imports, &mut memories);
-        let vm_tables = Self::finalize_tables(module, imports, &mut tables, vmctx);
+        let vm_tables = Self::finalize_tables(module, imports, &mut tables, ctx);
         let vm_globals = Self::finalize_globals(&mut globals);
 
         let dynamic_sigindices = Self::generate_sigindices(&module.info);
@@ -179,7 +179,7 @@ impl LocalBacking {
         module: &ModuleInner,
         imports: &ImportBacking,
         tables: &mut SliceMap<LocalTableIndex, Table>,
-        vmctx: *mut vm::Ctx,
+        ctx: *mut vm::Ctx,
     ) -> BoxedMap<LocalTableIndex, *mut vm::LocalTable> {
         for init in &module.info.elem_initializers {
             let init_base = match init.base {
@@ -221,12 +221,12 @@ impl LocalBacking {
                                         .unwrap()
                                         .as_ptr()
                                         as *const vm::Func,
-                                    vmctx,
+                                    ctx,
                                 ),
                                 LocalOrImport::Import(imported_func_index) => {
-                                    let vm::ImportedFunc { func, vmctx } =
+                                    let vm::ImportedFunc { func, ctx } =
                                         imports.vm_functions[imported_func_index];
-                                    (func, vmctx)
+                                    (func, ctx)
                                 }
                             };
 
@@ -260,12 +260,12 @@ impl LocalBacking {
                                         .unwrap()
                                         .as_ptr()
                                         as *const vm::Func,
-                                    vmctx,
+                                    ctx,
                                 ),
                                 LocalOrImport::Import(imported_func_index) => {
-                                    let vm::ImportedFunc { func, vmctx } =
+                                    let vm::ImportedFunc { func, ctx } =
                                         imports.vm_functions[imported_func_index];
-                                    (func, vmctx)
+                                    (func, ctx)
                                 }
                             };
 
@@ -333,15 +333,15 @@ pub struct ImportBacking {
 }
 
 impl ImportBacking {
-    pub fn new(
+    pub fn new<Data>(
         module: &ModuleInner,
-        imports: &ImportObject,
-        vmctx: *mut vm::Ctx,
+        imports: &ImportObject<Data>,
+        ctx: *mut vm::Ctx,
     ) -> LinkResult<Self> {
         let mut failed = false;
         let mut link_errors = vec![];
 
-        let vm_functions = import_functions(module, imports, vmctx).unwrap_or_else(|le| {
+        let vm_functions = import_functions(module, imports, ctx).unwrap_or_else(|le| {
             failed = true;
             link_errors.extend(le);
             Map::new().into_boxed_map()
@@ -386,10 +386,10 @@ impl ImportBacking {
     }
 }
 
-fn import_functions(
+fn import_functions<Data>(
     module: &ModuleInner,
-    imports: &ImportObject,
-    vmctx: *mut vm::Ctx,
+    imports: &ImportObject<Data>,
+    ctx_ptr: *mut vm::Ctx,
 ) -> LinkResult<BoxedMap<ImportedFuncIndex, vm::ImportedFunc>> {
     let mut link_errors = vec![];
     let mut functions = Map::with_capacity(module.info.imported_functions.len());
@@ -415,13 +415,14 @@ fn import_functions(
                 func,
                 ctx,
                 signature,
+                _marker: PhantomData,
             }) => {
                 if *expected_sig == *signature {
                     functions.push(vm::ImportedFunc {
                         func: func.inner(),
-                        vmctx: match ctx {
+                        ctx: match ctx {
                             Context::External(ctx) => ctx,
-                            Context::Internal => vmctx,
+                            Context::Internal => ctx_ptr,
                         },
                     });
                 } else {
@@ -464,9 +465,9 @@ fn import_functions(
     }
 }
 
-fn import_memories(
+fn import_memories<Data>(
     module: &ModuleInner,
-    imports: &ImportObject,
+    imports: &ImportObject<Data>,
 ) -> LinkResult<(
     BoxedMap<ImportedMemoryIndex, Memory>,
     BoxedMap<ImportedMemoryIndex, *mut vm::LocalMemory>,
@@ -536,9 +537,9 @@ fn import_memories(
     }
 }
 
-fn import_tables(
+fn import_tables<Data>(
     module: &ModuleInner,
-    imports: &ImportObject,
+    imports: &ImportObject<Data>,
 ) -> LinkResult<(
     BoxedMap<ImportedTableIndex, Table>,
     BoxedMap<ImportedTableIndex, *mut vm::LocalTable>,
@@ -608,9 +609,9 @@ fn import_tables(
     }
 }
 
-fn import_globals(
+fn import_globals<Data>(
     module: &ModuleInner,
-    imports: &ImportObject,
+    imports: &ImportObject<Data>,
 ) -> LinkResult<(
     BoxedMap<ImportedGlobalIndex, Global>,
     BoxedMap<ImportedGlobalIndex, *mut vm::LocalGlobal>,

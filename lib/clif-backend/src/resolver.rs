@@ -386,12 +386,12 @@ extern "C" fn f64_print(_ctx: &mut vm::Ctx, n: f64) {
     eprint!(" f64: {},", n);
 }
 extern "C" fn start_debug(ctx: &mut vm::Ctx, func_index: u32) {
-    if let Some(symbol_map) = unsafe { ctx.borrow_symbol_map() } {
-        if let Some(fn_name) = symbol_map.get(&func_index) {
-            eprint!("func ({} ({})), args: [", fn_name, func_index);
-            return;
-        }
-    }
+    // if let Some(symbol_map) = unsafe { ctx.borrow_symbol_map() } {
+    //     if let Some(fn_name) = symbol_map.get(&func_index) {
+    //         eprint!("func ({} ({})), args: [", fn_name, func_index);
+    //         return;
+    //     }
+    // }
     eprint!("func ({}), args: [", func_index);
 }
 extern "C" fn end_debug(_ctx: &mut vm::Ctx) {

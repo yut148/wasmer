@@ -114,7 +114,7 @@ pub trait WasmTypeList {
         Rets: WasmTypeList;
 }
 
-pub trait ExternalFunction<Args, Rets>
+pub trait ExternalFunction<Args, Rets, Data>
 where
     Args: WasmTypeList,
     Rets: WasmTypeList,
@@ -157,14 +157,14 @@ where
 //     Func::new(f)
 // }
 
-pub struct Func<'a, Args = (), Rets = (), Inner: Kind = Wasm> {
+pub struct Func<'a, Args = (), Rets = (), Data = (), Inner: Kind = Wasm> {
     inner: Inner,
     f: NonNull<vm::Func>,
-    ctx: *mut Ctx,
+    ctx: *mut Ctx<Data>,
     _phantom: PhantomData<(&'a (), Args, Rets)>,
 }
 
-impl<'a, Args, Rets> Func<'a, Args, Rets, Wasm>
+impl<'a, Args, Rets, Data> Func<'a, Args, Rets, Data, Wasm>
 where
     Args: WasmTypeList,
     Rets: WasmTypeList,
@@ -172,8 +172,8 @@ where
     pub(crate) unsafe fn from_raw_parts(
         inner: Wasm,
         f: NonNull<vm::Func>,
-        ctx: *mut Ctx,
-    ) -> Func<'a, Args, Rets, Wasm> {
+        ctx: *mut Ctx<Data>,
+    ) -> Func<'a, Args, Rets, Data, Wasm> {
         Func {
             inner,
             f,
@@ -183,14 +183,14 @@ where
     }
 }
 
-impl<'a, Args, Rets> Func<'a, Args, Rets, Host>
+impl<'a, Args, Rets, Data> Func<'a, Args, Rets, Data, Host>
 where
     Args: WasmTypeList,
     Rets: WasmTypeList,
 {
-    pub fn new<F>(f: F) -> Func<'a, Args, Rets, Host>
+    pub fn new<F>(f: F) -> Func<'a, Args, Rets, Data, Host>
     where
-        F: ExternalFunction<Args, Rets>,
+        F: ExternalFunction<Args, Rets, Data>,
     {
         Func {
             inner: Host(()),
@@ -201,7 +201,7 @@ where
     }
 }
 
-impl<'a, Args, Rets, Inner> Func<'a, Args, Rets, Inner>
+impl<'a, Args, Rets, Data, Inner> Func<'a, Args, Rets, Data, Inner>
 where
     Args: WasmTypeList,
     Rets: WasmTypeList,
@@ -267,12 +267,12 @@ impl<A: WasmExternType> WasmTypeList for (A,) {
     }
 }
 
-impl<'a, A: WasmExternType, Rets> Func<'a, (A,), Rets, Wasm>
+impl<'a, A: WasmExternType, Rets, Data> Func<'a, (A,), Rets, Data, Wasm>
 where
     Rets: WasmTypeList,
 {
     pub fn call(&self, a: A) -> Result<Rets, RuntimeError> {
-        unsafe { <A as WasmTypeList>::call(a, self.f, self.inner, self.ctx) }.map_err(|e| {
+        unsafe { <A as WasmTypeList>::call(a, self.f, self.inner, self.ctx as _) }.map_err(|e| {
             RuntimeError::Trap {
                 msg: e.to_string().into(),
             }
@@ -334,14 +334,14 @@ macro_rules! impl_traits {
             }
         }
 
-        impl< $( $x: WasmExternType, )* Rets: WasmTypeList, Trap: TrapEarly<Rets>, FN: Fn( &mut Ctx $( ,$x )* ) -> Trap> ExternalFunction<($( $x ),*), Rets> for FN {
+        impl< $( $x: WasmExternType, )* Rets: WasmTypeList, Trap: TrapEarly<Rets>, Data, FN: Fn( &mut Ctx<Data> $( ,$x )* ) -> Trap> ExternalFunction<($( $x ),*), Rets, Data> for FN {
             #[allow(non_snake_case)]
             fn to_raw(&self) -> NonNull<vm::Func> {
                 assert_eq!(mem::size_of::<Self>(), 0, "you cannot use a closure that captures state for `Func`.");
 
                 /// This is required for the llvm backend to be able to unwind through this function.
                 #[cfg_attr(nightly, unwind(allowed))]
-                extern fn wrap<$( $x: WasmExternType, )* Rets: WasmTypeList, Trap: TrapEarly<Rets>, FN: Fn( &mut Ctx $( ,$x )* ) -> Trap>( ctx: &mut Ctx $( ,$x: $x )* ) -> Rets::CStruct {
+                extern fn wrap<$( $x: WasmExternType, )* Rets: WasmTypeList, Trap: TrapEarly<Rets>, Data, FN: Fn( &mut Ctx<Data> $( ,$x )* ) -> Trap>( ctx: &mut Ctx<Data> $( ,$x: $x )* ) -> Rets::CStruct {
                     let f: FN = unsafe { mem::transmute_copy(&()) };
 
                     let err = match panic::catch_unwind(panic::AssertUnwindSafe(|| {
@@ -363,18 +363,18 @@ macro_rules! impl_traits {
                     }
                 }
 
-                NonNull::new(wrap::<$( $x, )* Rets, Trap, Self> as *mut vm::Func).unwrap()
+                NonNull::new(wrap::<$( $x, )* Rets, Trap, Data, Self> as *mut vm::Func).unwrap()
             }
         }
 
-        impl<'a, $( $x: WasmExternType, )* Rets> Func<'a, ( $( $x ),* ), Rets, Wasm>
+        impl<'a, $( $x: WasmExternType, )* Rets, Data> Func<'a, ( $( $x ),* ), Rets, Data, Wasm>
         where
             Rets: WasmTypeList,
         {
             #[allow(non_snake_case)]
             pub fn call(&self, $( $x: $x, )* ) -> Result<Rets, RuntimeError> {
                 #[allow(unused_parens)]
-                unsafe { <( $( $x ),* ) as WasmTypeList>::call(( $($x),* ), self.f, self.inner, self.ctx) }.map_err(|e| {
+                unsafe { <( $( $x ),* ) as WasmTypeList>::call(( $($x),* ), self.f, self.inner, self.ctx as _) }.map_err(|e| {
                     RuntimeError::Trap {
                         msg: e.to_string().into(),
                     }
@@ -407,13 +407,13 @@ impl_traits!([C] S10, A, B, C, D, E, F, G, H, I, J);
 impl_traits!([C] S11, A, B, C, D, E, F, G, H, I, J, K);
 impl_traits!([C] S12, A, B, C, D, E, F, G, H, I, J, K, L);
 
-impl<'a, Args, Rets, Inner> IsExport for Func<'a, Args, Rets, Inner>
+impl<'a, Args, Rets, Data, Inner> IsExport<'a, Data> for Func<'a, Args, Rets, Data, Inner>
 where
     Args: WasmTypeList,
     Rets: WasmTypeList,
     Inner: Kind,
 {
-    fn to_export(&self) -> Export {
+    fn to_export(&self) -> Export<'a> {
         let func = unsafe { FuncPointer::new(self.f.as_ptr()) };
         let ctx = Context::Internal;
         let signature = Arc::new(FuncSig::new(Args::types(), Rets::types()));
@@ -422,6 +422,7 @@ where
             func,
             ctx,
             signature,
+            _marker: PhantomData,
         }
     }
 }
@@ -431,7 +432,8 @@ mod tests {
     use super::*;
     #[test]
     fn test_call() {
-        fn foo(_ctx: &mut Ctx, a: i32, b: i32) -> (i32, i32) {
+        fn foo(ctx: &mut Ctx<String>, a: i32, b: i32) -> (i32, i32) {
+            println!("{}", ctx.data);
             (a, b)
         }
 

@@ -410,7 +410,7 @@ impl<'env, 'module, 'isa> FuncEnvironment for FuncEnv<'env, 'module, 'isa> {
                 ptr_type,
                 mflags,
                 entry_addr,
-                vm::Anyfunc::offset_vmctx() as i32,
+                vm::Anyfunc::offset_ctx() as i32,
             );
 
             let argument_vmctx_ptr = pos
@@ -548,7 +548,7 @@ impl<'env, 'module, 'isa> FuncEnvironment for FuncEnv<'env, 'module, 'isa> {
 
                 let imported_vmctx_addr = pos.func.create_global_value(ir::GlobalValueData::Load {
                     base: imported_func_struct_addr,
-                    offset: (vm::ImportedFunc::offset_vmctx() as i32).into(),
+                    offset: (vm::ImportedFunc::offset_ctx() as i32).into(),
                     global_type: ptr_type,
                     readonly: true,
                 });

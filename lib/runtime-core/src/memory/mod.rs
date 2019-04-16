@@ -164,8 +164,8 @@ impl Memory {
     }
 }
 
-impl IsExport for Memory {
-    fn to_export(&self) -> Export {
+impl<'a, Data> IsExport<'a, Data> for Memory {
+    fn to_export(&self) -> Export<'a> {
         Export::Memory(self.clone())
     }
 }

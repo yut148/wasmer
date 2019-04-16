@@ -10,7 +10,7 @@ use std::ffi::c_void;
 use std::{iter, mem, ptr::NonNull};
 use wasmer_runtime_core::{
     backend::sys::{Memory, Protect},
-    module::{ExportIndex, ModuleInfo},
+    module::{ModuleInfo, ResourceIndex},
     types::{FuncSig, SigIndex, Type},
     vm,
 };
@@ -72,7 +72,7 @@ impl Trampolines {
             .exports
             .values()
             .filter_map(|export| match export {
-                ExportIndex::Func(func_index) => Some(func_index),
+                ResourceIndex::Func(func_index) => Some(func_index),
                 _ => None,
             })
             .chain(module.start_func.iter());

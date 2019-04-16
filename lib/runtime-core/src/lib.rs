@@ -14,6 +14,7 @@ pub mod backend;
 mod backing;
 
 pub mod cache;
+pub mod config;
 pub mod error;
 pub mod export;
 pub mod global;
@@ -69,13 +70,20 @@ pub fn compile_with(
     compiler: &dyn backend::Compiler,
 ) -> CompileResult<module::Module> {
     let token = backend::Token::generate();
-    compiler
-        .compile(wasm, Default::default(), token)
-        .map(|mut inner| {
-            let inner_info: &mut crate::module::ModuleInfo = &mut inner.info;
-            inner_info.import_custom_sections(wasm).unwrap();
-            module::Module::new(Arc::new(inner))
-        })
+
+    let metering = config::Metering::default();
+    let allowed = config::Allowed::default();
+    let config = config::CompileConfig {
+        symbol_map: None,
+        metering: &metering,
+        allowed: &allowed,
+    };
+
+    compiler.compile(wasm, config, token).map(|mut inner| {
+        let inner_info: &mut crate::module::ModuleInfo = &mut inner.info;
+        inner_info.import_custom_sections(wasm).unwrap();
+        module::Module::new(Arc::new(inner))
+    })
 }
 
 /// The same as `compile_with` but changes the compiler behavior
@@ -83,7 +91,7 @@ pub fn compile_with(
 pub fn compile_with_config(
     wasm: &[u8],
     compiler: &dyn backend::Compiler,
-    compiler_config: backend::CompilerConfig,
+    compiler_config: config::CompileConfig,
 ) -> CompileResult<module::Module> {
     let token = backend::Token::generate();
     compiler
