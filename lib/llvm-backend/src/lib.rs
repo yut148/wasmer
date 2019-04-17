@@ -39,7 +39,7 @@ impl Compiler for LLVMCompiler {
         let (info, code_reader) = read_info::read_module(wasm, compiler_config).unwrap();
         let (module, intrinsics) = code::parse_function_bodies(&info, code_reader).unwrap();
 
-        let (backend, protected_caller) = backend::LLVMBackend::new(module, intrinsics);
+        let backend = backend::LLVMBackend::new(module, intrinsics);
 
         // Create placeholder values here.
         let cache_gen = {
@@ -62,8 +62,7 @@ impl Compiler for LLVMCompiler {
         };
 
         Ok(ModuleInner {
-            func_resolver: Box::new(backend),
-            protected_caller: Box::new(protected_caller),
+            runnable_module: Box::new(backend),
             cache_gen,
 
             info,
@@ -106,10 +105,11 @@ fn test_read_module() {
     use std::mem::transmute;
     use wabt::wat2wasm;
     use wasmer_runtime_core::{
+        backend::RunnableModule,
         config::{Allowed, Metering},
         structures::TypedIndex,
         types::LocalFuncIndex,
-        vm, vmcalls,
+        vm,
     };
     // let wasm = include_bytes!("../../spectests/examples/simple/simple.wasm") as &[u8];
     let wat = r#"
@@ -136,7 +136,7 @@ fn test_read_module() {
 
     let (module, intrinsics) = code::parse_function_bodies(&info, code_reader).unwrap();
 
-    let (backend, _caller) = backend::LLVMBackend::new(module, intrinsics);
+    let backend = backend::LLVMBackend::new(module, intrinsics);
 
     let func_ptr = backend.get_func(&info, LocalFuncIndex::new(0)).unwrap();
 
