@@ -274,8 +274,8 @@ impl WasiFs {
     }
 }
 
-pub struct WasiState<'a> {
+pub struct WasiState {
     pub fs: WasiFs,
-    pub args: &'a [Vec<u8>],
-    pub envs: &'a [Vec<u8>],
+    pub args: Vec<Vec<u8>>,
+    pub envs: Vec<Vec<u8>>,
 }

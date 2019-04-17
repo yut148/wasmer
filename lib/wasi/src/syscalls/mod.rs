@@ -21,11 +21,6 @@ pub use unix::*;
 #[cfg(any(target_os = "windows"))]
 pub use windows::*;
 
-#[allow(clippy::mut_from_ref)]
-fn get_wasi_state(ctx: &Ctx) -> &mut WasiState {
-    unsafe { &mut *(ctx.data as *mut WasiState) }
-}
-
 fn write_bytes<T: Write>(
     mut write_loc: T,
     memory: &Memory,
@@ -85,12 +80,12 @@ fn write_buffer_array(
 ///     A pointer to a buffer to write the argument string data.
 ///
 pub fn args_get(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     argv: WasmPtr<WasmPtr<u8, Array>, Array>,
     argv_buf: WasmPtr<u8, Array>,
 ) -> __wasi_errno_t {
     debug!("wasi::args_get");
-    let state = get_wasi_state(ctx);
+    let state = &mut ctx.data;
     let memory = ctx.memory(0);
 
     let result = write_buffer_array(memory, &*state.args, argv, argv_buf);
@@ -121,7 +116,7 @@ pub fn args_get(
 /// - `size_t *argv_buf_size`
 ///     The size of the argument string data.
 pub fn args_sizes_get(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     argc: WasmPtr<u32>,
     argv_buf_size: WasmPtr<u32>,
 ) -> __wasi_errno_t {
@@ -131,7 +126,7 @@ pub fn args_sizes_get(
     let argc = wasi_try!(argc.deref(memory));
     let argv_buf_size = wasi_try!(argv_buf_size.deref(memory));
 
-    let state = get_wasi_state(ctx);
+    let state = &mut ctx.data;
 
     let argc_val = state.args.len() as u32;
     let argv_buf_size_val = state.args.iter().map(|v| v.len() as u32 + 1).sum();
@@ -152,7 +147,7 @@ pub fn args_sizes_get(
 /// - `__wasi_timestamp_t *resolution`
 ///     The resolution of the clock in nanoseconds
 pub fn clock_res_get(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     clock_id: __wasi_clockid_t,
     resolution: WasmPtr<__wasi_timestamp_t>,
 ) -> __wasi_errno_t {
@@ -174,7 +169,7 @@ pub fn clock_res_get(
 /// - `__wasi_timestamp_t *time`
 ///     The value of the clock in nanoseconds
 pub fn clock_time_get(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     clock_id: __wasi_clockid_t,
     precision: __wasi_timestamp_t,
     time: WasmPtr<__wasi_timestamp_t>,
@@ -195,12 +190,12 @@ pub fn clock_time_get(
 /// - `char *environ_buf`
 ///     A pointer to a buffer to write the environment variable string data.
 pub fn environ_get(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     environ: WasmPtr<WasmPtr<u8, Array>, Array>,
     environ_buf: WasmPtr<u8, Array>,
 ) -> __wasi_errno_t {
     debug!("wasi::environ_get");
-    let state = get_wasi_state(ctx);
+    let state = &mut ctx.data;
     let memory = ctx.memory(0);
 
     write_buffer_array(memory, &*state.args, environ, environ_buf)
@@ -214,7 +209,7 @@ pub fn environ_get(
 /// - `size_t *environ_buf_size`
 ///     The size of the environment variable string data.
 pub fn environ_sizes_get(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     environ_count: WasmPtr<u32>,
     environ_buf_size: WasmPtr<u32>,
 ) -> __wasi_errno_t {
@@ -224,7 +219,7 @@ pub fn environ_sizes_get(
     let environ_count = wasi_try!(environ_count.deref(memory));
     let environ_buf_size = wasi_try!(environ_buf_size.deref(memory));
 
-    let state = get_wasi_state(ctx);
+    let state = &mut ctx.data;
 
     environ_count.set(state.envs.len() as u32);
     environ_buf_size.set(state.envs.iter().map(|v| v.len() as u32).sum());
@@ -244,7 +239,7 @@ pub fn environ_sizes_get(
 /// - `__wasi_advice_t advice`
 ///     The advice to give
 pub fn fd_advise(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     offset: __wasi_filesize_t,
     len: __wasi_filesize_t,
@@ -267,7 +262,7 @@ pub fn fd_advise(
 /// - `__wasi_filesize_t len`
 ///     The length from the offset marking the end of the allocation
 pub fn fd_allocate(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     offset: __wasi_filesize_t,
     len: __wasi_filesize_t,
@@ -286,7 +281,7 @@ pub fn fd_allocate(
 ///     If `fd` is a directory
 /// - `__WASI_EBADF`
 ///     If `fd` is invalid or not open (TODO: consider __WASI_EINVAL)
-pub fn fd_close(ctx: &mut Ctx, fd: __wasi_fd_t) -> __wasi_errno_t {
+pub fn fd_close(ctx: &mut Ctx<WasiState>, fd: __wasi_fd_t) -> __wasi_errno_t {
     debug!("wasi::fd_close");
     // FD is too large
     return __WASI_EMFILE;
@@ -302,9 +297,9 @@ pub fn fd_close(ctx: &mut Ctx, fd: __wasi_fd_t) -> __wasi_errno_t {
 /// Inputs:
 /// - `__wasi_fd_t fd`
 ///     The file descriptor to sync
-pub fn fd_datasync(ctx: &mut Ctx, fd: __wasi_fd_t) -> __wasi_errno_t {
+pub fn fd_datasync(ctx: &mut Ctx<WasiState>, fd: __wasi_fd_t) -> __wasi_errno_t {
     debug!("wasi::fd_datasync");
-    let state = get_wasi_state(ctx);
+    let state = &mut ctx.data;
 
     if let Err(e) = state.fs.flush(fd) {
         e
@@ -322,12 +317,12 @@ pub fn fd_datasync(ctx: &mut Ctx, fd: __wasi_fd_t) -> __wasi_errno_t {
 /// - `__wasi_fdstat_t *buf`
 ///     The location where the metadata will be written
 pub fn fd_fdstat_get(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     buf: WasmPtr<__wasi_fdstat_t>,
 ) -> __wasi_errno_t {
     debug!("wasi::fd_fdstat_get: fd={}", fd);
-    let mut state = get_wasi_state(ctx);
+    let mut state = &mut ctx.data;
     let memory = ctx.memory(0);
 
     let stat = wasi_try!(state.fs.fdstat(fd));
@@ -346,12 +341,12 @@ pub fn fd_fdstat_get(
 /// - `__wasi_fdflags_t flags`
 ///     The flags to apply to `fd`
 pub fn fd_fdstat_set_flags(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     flags: __wasi_fdflags_t,
 ) -> __wasi_errno_t {
     debug!("wasi::fd_fdstat_set_flags");
-    let state = get_wasi_state(ctx);
+    let state = &mut ctx.data;
     let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
 
     if !has_rights(fd_entry.rights, __WASI_RIGHT_FD_FDSTAT_SET_FLAGS) {
@@ -372,13 +367,13 @@ pub fn fd_fdstat_set_flags(
 /// - `__wasi_rights_t fs_rights_inheriting`
 ///     The inheriting rights to apply to `fd`
 pub fn fd_fdstat_set_rights(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     fs_rights_base: __wasi_rights_t,
     fs_rights_inheriting: __wasi_rights_t,
 ) -> __wasi_errno_t {
     debug!("wasi::fd_fdstat_set_rights");
-    let state = get_wasi_state(ctx);
+    let state = &mut ctx.data;
     let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
 
     // ensure new rights are a subset of current rights
@@ -403,12 +398,12 @@ pub fn fd_fdstat_set_rights(
 /// - `__wasi_filestat_t *buf`
 ///     Where the metadata from `fd` will be written
 pub fn fd_filestat_get(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     buf: WasmPtr<__wasi_filestat_t>,
 ) -> __wasi_errno_t {
     debug!("wasi::fd_filestat_get");
-    let mut state = get_wasi_state(ctx);
+    let mut state = &mut ctx.data;
     let memory = ctx.memory(0);
 
     let stat = wasi_try!(state.fs.filestat_fd(fd));
@@ -420,7 +415,7 @@ pub fn fd_filestat_get(
 }
 
 pub fn fd_filestat_set_size(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     st_size: __wasi_filesize_t,
 ) -> __wasi_errno_t {
@@ -438,14 +433,14 @@ pub fn fd_filestat_set_size(
 /// - `__wasi_fstflags_t fst_flags`
 ///     Bit-vector for controlling which times get set
 pub fn fd_filestat_set_times(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     st_atim: __wasi_timestamp_t,
     st_mtim: __wasi_timestamp_t,
     fst_flags: __wasi_fstflags_t,
 ) -> __wasi_errno_t {
     debug!("wasi::fd_filestat_set_times");
-    let state = get_wasi_state(ctx);
+    let state = &mut ctx.data;
     let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
 
     if !has_rights(fd_entry.rights, __WASI_RIGHT_FD_FILESTAT_SET_TIMES) {
@@ -479,7 +474,7 @@ pub fn fd_filestat_set_times(
 }
 
 pub fn fd_pread(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     iovs: WasmPtr<__wasi_iovec_t, Array>,
     iovs_len: u32,
@@ -506,7 +501,7 @@ pub fn fd_pread(
 /// - `__wasi_prestat *buf`
 ///     Where the metadata will be written
 pub fn fd_prestat_get(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     buf: WasmPtr<__wasi_prestat_t>,
 ) -> __wasi_errno_t {
@@ -515,14 +510,14 @@ pub fn fd_prestat_get(
 
     let prestat_ptr = wasi_try!(buf.deref(memory));
 
-    let state = get_wasi_state(ctx);
+    let state = &mut ctx.data;
     prestat_ptr.set(wasi_try!(state.fs.prestat_fd(fd)));
 
     __WASI_ESUCCESS
 }
 
 pub fn fd_prestat_dir_name(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     path: WasmPtr<u8, Array>,
     path_len: u32,
@@ -571,7 +566,7 @@ pub fn fd_prestat_dir_name(
 /// - `u32 *nwritten`
 ///     Number of bytes written
 pub fn fd_pwrite(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     iovs: WasmPtr<__wasi_ciovec_t, Array>,
     iovs_len: u32,
@@ -600,7 +595,7 @@ pub fn fd_pwrite(
             wasi_try!(write_bytes(handle, memory, iovs_arr_cell))
         }
         _ => {
-            let state = get_wasi_state(ctx);
+            let state = &mut ctx.data;
             let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
 
             if !has_rights(fd_entry.rights, __WASI_RIGHT_FD_WRITE) {
@@ -649,7 +644,7 @@ pub fn fd_pwrite(
 /// - `u32 *nread`
 ///     Number of bytes read
 pub fn fd_read(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     iovs: WasmPtr<__wasi_iovec_t, Array>,
     iovs_len: u32,
@@ -687,7 +682,7 @@ pub fn fd_read(
         }
         1 | 2 => return __WASI_EINVAL,
         _ => {
-            let state = get_wasi_state(ctx);
+            let state = &mut ctx.data;
             let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
 
             if !has_rights(fd_entry.rights, __WASI_RIGHT_FD_READ) {
@@ -737,7 +732,7 @@ pub fn fd_read(
 ///     The Number of bytes stored in `buf`; if less than `buf_len` then entire
 ///     directory has been read
 pub fn fd_readdir(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     buf: WasmPtr<u8, Array>,
     buf_len: u32,
@@ -763,9 +758,9 @@ pub fn fd_readdir(
 ///     File descriptor to copy
 /// - `__wasi_fd_t to`
 ///     Location to copy file descriptor to
-pub fn fd_renumber(ctx: &mut Ctx, from: __wasi_fd_t, to: __wasi_fd_t) -> __wasi_errno_t {
+pub fn fd_renumber(ctx: &mut Ctx<WasiState>, from: __wasi_fd_t, to: __wasi_fd_t) -> __wasi_errno_t {
     debug!("wasi::fd_renumber: from={}, to={}", from, to);
-    let state = get_wasi_state(ctx);
+    let state = &mut ctx.data;
     let fd_entry = wasi_try!(state.fs.fd_map.get(&from).ok_or(__WASI_EBADF));
 
     state.fs.fd_map.insert(
@@ -792,7 +787,7 @@ pub fn fd_renumber(ctx: &mut Ctx, from: __wasi_fd_t, to: __wasi_fd_t) -> __wasi_
 /// - `__wasi_filesize_t *fd`
 ///     The new offset relative to the start of the file
 pub fn fd_seek(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     offset: __wasi_filedelta_t,
     whence: __wasi_whence_t,
@@ -800,7 +795,7 @@ pub fn fd_seek(
 ) -> __wasi_errno_t {
     debug!("wasi::fd_seek: fd={}", fd);
     let memory = ctx.memory(0);
-    let state = get_wasi_state(ctx);
+    let state = &mut ctx.data;
     let new_offset_cell = wasi_try!(newoffset.deref(memory));
 
     let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
@@ -831,7 +826,7 @@ pub fn fd_seek(
 /// TODO: figure out which errors this should return
 /// - `__WASI_EPERM`
 /// - `__WAIS_ENOTCAPABLE`
-pub fn fd_sync(ctx: &mut Ctx, fd: __wasi_fd_t) -> __wasi_errno_t {
+pub fn fd_sync(ctx: &mut Ctx<WasiState>, fd: __wasi_fd_t) -> __wasi_errno_t {
     debug!("wasi::fd_sync");
     // TODO: check __WASI_RIGHT_FD_SYNC
     unimplemented!()
@@ -846,13 +841,13 @@ pub fn fd_sync(ctx: &mut Ctx, fd: __wasi_fd_t) -> __wasi_errno_t {
 /// - `__wasi_filesize_t *offset`
 ///     The offset of `fd` relative to the start of the file
 pub fn fd_tell(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     offset: WasmPtr<__wasi_filesize_t>,
 ) -> __wasi_errno_t {
     debug!("wasi::fd_tell");
     let memory = ctx.memory(0);
-    let state = get_wasi_state(ctx);
+    let state = &mut ctx.data;
     let offset_cell = wasi_try!(offset.deref(memory));
 
     let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
@@ -881,7 +876,7 @@ pub fn fd_tell(
 /// Errors:
 ///
 pub fn fd_write(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     iovs: WasmPtr<__wasi_ciovec_t, Array>,
     iovs_len: u32,
@@ -908,7 +903,7 @@ pub fn fd_write(
             wasi_try!(write_bytes(handle, memory, iovs_arr_cell))
         }
         _ => {
-            let state = get_wasi_state(ctx);
+            let state = &mut ctx.data;
             let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
 
             if !has_rights(fd_entry.rights, __WASI_RIGHT_FD_WRITE) {
@@ -956,7 +951,7 @@ pub fn fd_write(
 /// - __WASI_RIGHT_PATH_CREATE_DIRECTORY
 ///     This right must be set on the directory that the file is created in (TODO: verify that this is true)
 pub fn path_create_directory(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     path: WasmPtr<u8, Array>,
     path_len: u32,
@@ -981,7 +976,7 @@ pub fn path_create_directory(
 /// - `__wasi_file_stat_t *buf`
 ///     The location where the metadata will be stored
 pub fn path_filestat_get(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     flags: __wasi_lookupflags_t,
     path: WasmPtr<u8, Array>,
@@ -989,7 +984,7 @@ pub fn path_filestat_get(
     buf: WasmPtr<__wasi_filestat_t>,
 ) -> __wasi_errno_t {
     debug!("wasi::path_filestat_get");
-    let state = get_wasi_state(ctx);
+    let state = &mut ctx.data;
     let memory = ctx.memory(0);
 
     let root_dir = wasi_try!(state.fs.fd_map.get(&fd).ok_or(__WASI_EBADF));
@@ -1060,7 +1055,7 @@ pub fn path_filestat_get(
 /// - `__wasi_fstflags_t fst_flags`
 ///     A bitmask controlling which attributes are set
 pub fn path_filestat_set_times(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     flags: __wasi_lookupflags_t,
     path: WasmPtr<u8, Array>,
@@ -1091,7 +1086,7 @@ pub fn path_filestat_set_times(
 /// - `u32 old_path_len`
 ///     Length of the `new_path` string
 pub fn path_link(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     old_fd: __wasi_fd_t,
     old_flags: __wasi_lookupflags_t,
     old_path: WasmPtr<u8, Array>,
@@ -1129,7 +1124,7 @@ pub fn path_link(
 /// Possible Errors:
 /// - `__WASI_EACCES`, `__WASI_EBADF`, `__WASI_EFAULT`, `__WASI_EFBIG?`, `__WASI_EINVAL`, `__WASI_EIO`, `__WASI_ELOOP`, `__WASI_EMFILE`, `__WASI_ENAMETOOLONG?`, `__WASI_ENFILE`, `__WASI_ENOENT`, `__WASI_ENOTDIR`, `__WASI_EROFS`, and `__WASI_ENOTCAPABLE`
 pub fn path_open(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     dirfd: __wasi_fd_t,
     dirflags: __wasi_lookupflags_t,
     path: WasmPtr<u8, Array>,
@@ -1151,7 +1146,7 @@ pub fn path_open(
     // check for __WASI_RIGHT_PATH_OPEN somewhere, probably via dirfd
     let fd_cell = wasi_try!(fd.deref(memory));
     let path_cells = wasi_try!(path.deref(memory, 0, path_len));
-    let state = get_wasi_state(ctx);
+    let state = &mut ctx.data;
 
     // o_flags:
     // - __WASI_O_FLAG_CREAT (create if it does not exist)
@@ -1248,7 +1243,7 @@ pub fn path_open(
 }
 
 pub fn path_readlink(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     path: WasmPtr<u8, Array>,
     path_len: u32,
@@ -1260,7 +1255,7 @@ pub fn path_readlink(
     unimplemented!()
 }
 pub fn path_remove_directory(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     path: WasmPtr<u8, Array>,
     path_len: u32,
@@ -1269,7 +1264,7 @@ pub fn path_remove_directory(
     unimplemented!()
 }
 pub fn path_rename(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     old_fd: __wasi_fd_t,
     old_path: WasmPtr<u8, Array>,
     old_path_len: u32,
@@ -1281,7 +1276,7 @@ pub fn path_rename(
     unimplemented!()
 }
 pub fn path_symlink(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     old_path: WasmPtr<u8, Array>,
     old_path_len: u32,
     fd: __wasi_fd_t,
@@ -1292,7 +1287,7 @@ pub fn path_symlink(
     unimplemented!()
 }
 pub fn path_unlink_file(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     fd: __wasi_fd_t,
     path: WasmPtr<u8, Array>,
     path_len: u32,
@@ -1301,7 +1296,7 @@ pub fn path_unlink_file(
     unimplemented!()
 }
 pub fn poll_oneoff(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     in_: WasmPtr<__wasi_subscription_t, Array>,
     out_: WasmPtr<__wasi_event_t, Array>,
     nsubscriptions: u32,
@@ -1310,11 +1305,11 @@ pub fn poll_oneoff(
     debug!("wasi::poll_oneoff");
     unimplemented!()
 }
-pub fn proc_exit(ctx: &mut Ctx, rval: __wasi_exitcode_t) -> Result<(), &'static str> {
+pub fn proc_exit(ctx: &mut Ctx<WasiState>, rval: __wasi_exitcode_t) -> Result<(), &'static str> {
     debug!("wasi::proc_exit, {}", rval);
     Err("Instance exited")
 }
-pub fn proc_raise(ctx: &mut Ctx, sig: __wasi_signal_t) -> __wasi_errno_t {
+pub fn proc_raise(ctx: &mut Ctx<WasiState>, sig: __wasi_signal_t) -> __wasi_errno_t {
     debug!("wasi::proc_raise");
     unimplemented!()
 }
@@ -1326,7 +1321,11 @@ pub fn proc_raise(ctx: &mut Ctx, sig: __wasi_signal_t) -> __wasi_errno_t {
 ///     A pointer to a buffer where the random bytes will be written
 /// - `size_t buf_len`
 ///     The number of bytes that will be written
-pub fn random_get(ctx: &mut Ctx, buf: WasmPtr<u8, Array>, buf_len: u32) -> __wasi_errno_t {
+pub fn random_get(
+    ctx: &mut Ctx<WasiState>,
+    buf: WasmPtr<u8, Array>,
+    buf_len: u32,
+) -> __wasi_errno_t {
     debug!("wasi::random_get");
     let mut rng = thread_rng();
     let memory = ctx.memory(0);
@@ -1343,14 +1342,14 @@ pub fn random_get(ctx: &mut Ctx, buf: WasmPtr<u8, Array>, buf_len: u32) -> __was
 
 /// ### `sched_yield()`
 /// Yields execution of the thread
-pub fn sched_yield(ctx: &mut Ctx) -> __wasi_errno_t {
+pub fn sched_yield(ctx: &mut Ctx<WasiState>) -> __wasi_errno_t {
     debug!("wasi::sched_yield");
     ::std::thread::yield_now();
     __WASI_ESUCCESS
 }
 
 pub fn sock_recv(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     sock: __wasi_fd_t,
     ri_data: WasmPtr<__wasi_iovec_t, Array>,
     ri_data_len: u32,
@@ -1362,7 +1361,7 @@ pub fn sock_recv(
     unimplemented!()
 }
 pub fn sock_send(
-    ctx: &mut Ctx,
+    ctx: &mut Ctx<WasiState>,
     sock: __wasi_fd_t,
     si_data: WasmPtr<__wasi_ciovec_t, Array>,
     si_data_len: u32,
@@ -1372,7 +1371,11 @@ pub fn sock_send(
     debug!("wasi::sock_send");
     unimplemented!()
 }
-pub fn sock_shutdown(ctx: &mut Ctx, sock: __wasi_fd_t, how: __wasi_sdflags_t) -> __wasi_errno_t {
+pub fn sock_shutdown(
+    ctx: &mut Ctx<WasiState>,
+    sock: __wasi_fd_t,
+    how: __wasi_sdflags_t,
+) -> __wasi_errno_t {
     debug!("wasi::sock_shutdown");
     unimplemented!()
 }

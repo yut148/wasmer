@@ -17,28 +17,17 @@ pub use self::utils::is_wasi_module;
 
 use wasmer_runtime_core::{func, import::ImportObject, imports};
 
-pub fn generate_import_object(args: Vec<Vec<u8>>, envs: Vec<Vec<u8>>) -> ImportObject {
-    let state_gen = move || {
-        fn state_destructor(data: *mut c_void) {
-            unsafe {
-                drop(Box::from_raw(data as *mut WasiState));
-            }
-        }
-
-        let state = Box::new(WasiState {
-            fs: WasiFs::new().unwrap(),
-            args: &args[..],
-            envs: &envs[..],
-        });
-
-        (
-            Box::leak(state) as *mut WasiState as *mut c_void,
-            state_destructor as fn(*mut c_void),
-        )
-    };
+pub fn generate_import_object(
+    args: Vec<Vec<u8>>,
+    envs: Vec<Vec<u8>>,
+) -> ImportObject<'static, WasiState> {
     imports! {
         // This generates the wasi state.
-        state_gen,
+        move || WasiState {
+            fs: WasiFs::new().unwrap(),
+            args: args.clone(),
+            envs: envs.clone(),
+        },
         "wasi_unstable" => {
             "args_get" => func!(args_get),
             "args_sizes_get" => func!(args_sizes_get),
