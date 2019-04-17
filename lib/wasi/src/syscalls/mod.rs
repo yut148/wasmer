@@ -85,14 +85,13 @@ pub fn args_get(
     argv_buf: WasmPtr<u8, Array>,
 ) -> __wasi_errno_t {
     debug!("wasi::args_get");
-    let state = &mut ctx.data;
     let memory = ctx.memory(0);
 
-    let result = write_buffer_array(memory, &*state.args, argv, argv_buf);
+    let result = write_buffer_array(memory, &*ctx.data.args, argv, argv_buf);
 
     debug!(
         "=> args:\n{}",
-        state
+        ctx.data
             .args
             .iter()
             .enumerate()
@@ -126,10 +125,8 @@ pub fn args_sizes_get(
     let argc = wasi_try!(argc.deref(memory));
     let argv_buf_size = wasi_try!(argv_buf_size.deref(memory));
 
-    let state = &mut ctx.data;
-
-    let argc_val = state.args.len() as u32;
-    let argv_buf_size_val = state.args.iter().map(|v| v.len() as u32 + 1).sum();
+    let argc_val = ctx.data.args.len() as u32;
+    let argv_buf_size_val = ctx.data.args.iter().map(|v| v.len() as u32 + 1).sum();
     argc.set(argc_val);
     argv_buf_size.set(argv_buf_size_val);
 
@@ -195,10 +192,9 @@ pub fn environ_get(
     environ_buf: WasmPtr<u8, Array>,
 ) -> __wasi_errno_t {
     debug!("wasi::environ_get");
-    let state = &mut ctx.data;
     let memory = ctx.memory(0);
 
-    write_buffer_array(memory, &*state.args, environ, environ_buf)
+    write_buffer_array(memory, &*ctx.data.args, environ, environ_buf)
 }
 
 /// ### `environ_sizes_get()`
@@ -219,7 +215,7 @@ pub fn environ_sizes_get(
     let environ_count = wasi_try!(environ_count.deref(memory));
     let environ_buf_size = wasi_try!(environ_buf_size.deref(memory));
 
-    let state = &mut ctx.data;
+    let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
 
     environ_count.set(state.envs.len() as u32);
     environ_buf_size.set(state.envs.iter().map(|v| v.len() as u32).sum());
@@ -299,7 +295,7 @@ pub fn fd_close(ctx: &mut Ctx<WasiState>, fd: __wasi_fd_t) -> __wasi_errno_t {
 ///     The file descriptor to sync
 pub fn fd_datasync(ctx: &mut Ctx<WasiState>, fd: __wasi_fd_t) -> __wasi_errno_t {
     debug!("wasi::fd_datasync");
-    let state = &mut ctx.data;
+    let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
 
     if let Err(e) = state.fs.flush(fd) {
         e
@@ -322,7 +318,7 @@ pub fn fd_fdstat_get(
     buf: WasmPtr<__wasi_fdstat_t>,
 ) -> __wasi_errno_t {
     debug!("wasi::fd_fdstat_get: fd={}", fd);
-    let mut state = &mut ctx.data;
+    let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
     let memory = ctx.memory(0);
 
     let stat = wasi_try!(state.fs.fdstat(fd));
@@ -346,7 +342,7 @@ pub fn fd_fdstat_set_flags(
     flags: __wasi_fdflags_t,
 ) -> __wasi_errno_t {
     debug!("wasi::fd_fdstat_set_flags");
-    let state = &mut ctx.data;
+    let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
     let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
 
     if !has_rights(fd_entry.rights, __WASI_RIGHT_FD_FDSTAT_SET_FLAGS) {
@@ -373,7 +369,7 @@ pub fn fd_fdstat_set_rights(
     fs_rights_inheriting: __wasi_rights_t,
 ) -> __wasi_errno_t {
     debug!("wasi::fd_fdstat_set_rights");
-    let state = &mut ctx.data;
+    let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
     let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
 
     // ensure new rights are a subset of current rights
@@ -403,7 +399,7 @@ pub fn fd_filestat_get(
     buf: WasmPtr<__wasi_filestat_t>,
 ) -> __wasi_errno_t {
     debug!("wasi::fd_filestat_get");
-    let mut state = &mut ctx.data;
+    let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
     let memory = ctx.memory(0);
 
     let stat = wasi_try!(state.fs.filestat_fd(fd));
@@ -440,7 +436,7 @@ pub fn fd_filestat_set_times(
     fst_flags: __wasi_fstflags_t,
 ) -> __wasi_errno_t {
     debug!("wasi::fd_filestat_set_times");
-    let state = &mut ctx.data;
+    let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
     let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
 
     if !has_rights(fd_entry.rights, __WASI_RIGHT_FD_FILESTAT_SET_TIMES) {
@@ -510,7 +506,7 @@ pub fn fd_prestat_get(
 
     let prestat_ptr = wasi_try!(buf.deref(memory));
 
-    let state = &mut ctx.data;
+    let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
     prestat_ptr.set(wasi_try!(state.fs.prestat_fd(fd)));
 
     __WASI_ESUCCESS
@@ -595,7 +591,7 @@ pub fn fd_pwrite(
             wasi_try!(write_bytes(handle, memory, iovs_arr_cell))
         }
         _ => {
-            let state = &mut ctx.data;
+            let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
             let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
 
             if !has_rights(fd_entry.rights, __WASI_RIGHT_FD_WRITE) {
@@ -682,7 +678,7 @@ pub fn fd_read(
         }
         1 | 2 => return __WASI_EINVAL,
         _ => {
-            let state = &mut ctx.data;
+            let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
             let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
 
             if !has_rights(fd_entry.rights, __WASI_RIGHT_FD_READ) {
@@ -760,7 +756,7 @@ pub fn fd_readdir(
 ///     Location to copy file descriptor to
 pub fn fd_renumber(ctx: &mut Ctx<WasiState>, from: __wasi_fd_t, to: __wasi_fd_t) -> __wasi_errno_t {
     debug!("wasi::fd_renumber: from={}, to={}", from, to);
-    let state = &mut ctx.data;
+    let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
     let fd_entry = wasi_try!(state.fs.fd_map.get(&from).ok_or(__WASI_EBADF));
 
     state.fs.fd_map.insert(
@@ -795,7 +791,7 @@ pub fn fd_seek(
 ) -> __wasi_errno_t {
     debug!("wasi::fd_seek: fd={}", fd);
     let memory = ctx.memory(0);
-    let state = &mut ctx.data;
+    let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
     let new_offset_cell = wasi_try!(newoffset.deref(memory));
 
     let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
@@ -847,7 +843,7 @@ pub fn fd_tell(
 ) -> __wasi_errno_t {
     debug!("wasi::fd_tell");
     let memory = ctx.memory(0);
-    let state = &mut ctx.data;
+    let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
     let offset_cell = wasi_try!(offset.deref(memory));
 
     let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
@@ -903,7 +899,7 @@ pub fn fd_write(
             wasi_try!(write_bytes(handle, memory, iovs_arr_cell))
         }
         _ => {
-            let state = &mut ctx.data;
+            let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
             let fd_entry = wasi_try!(state.fs.fd_map.get_mut(&fd).ok_or(__WASI_EBADF));
 
             if !has_rights(fd_entry.rights, __WASI_RIGHT_FD_WRITE) {
@@ -984,7 +980,7 @@ pub fn path_filestat_get(
     buf: WasmPtr<__wasi_filestat_t>,
 ) -> __wasi_errno_t {
     debug!("wasi::path_filestat_get");
-    let state = &mut ctx.data;
+    let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
     let memory = ctx.memory(0);
 
     let root_dir = wasi_try!(state.fs.fd_map.get(&fd).ok_or(__WASI_EBADF));
@@ -1146,7 +1142,7 @@ pub fn path_open(
     // check for __WASI_RIGHT_PATH_OPEN somewhere, probably via dirfd
     let fd_cell = wasi_try!(fd.deref(memory));
     let path_cells = wasi_try!(path.deref(memory, 0, path_len));
-    let state = &mut ctx.data;
+    let state: &mut WasiState = unsafe { &mut *(&ctx.data as *const _ as *mut _) };
 
     // o_flags:
     // - __WASI_O_FLAG_CREAT (create if it does not exist)
