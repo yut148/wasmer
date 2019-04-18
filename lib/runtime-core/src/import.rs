@@ -10,6 +10,7 @@ use std::{
     ffi::c_void,
     marker::PhantomData,
     rc::Rc,
+    iter,
 };
 
 pub enum NamespaceItem<'a, Data = ()> {
@@ -30,21 +31,18 @@ impl<'a, Data> NamespaceItem<'a, Data> {
             Inst(ExportIter<'a, Data>),
             Ns(HashMapIter<'a, String, Export<'a>>),
         }
-
-        impl<'a, Data> Iterator for Iter<'a, Data> {
-            type Item = (&'a str, Export<'a>);
-            fn next(&mut self) -> Option<Self::Item> {
-                match self {
-                    Iter::Inst(iter) => iter.next(),
-                    Iter::Ns(ns) => ns.next().map(|(name, export)| (&**name, export.clone())),
-                }
-            }
-        }
-
-        match self {
+        
+        let mut export_iter = match self {
             NamespaceItem::Instance(inst) => Iter::Inst(inst.exports()),
             NamespaceItem::Namespace(ns) => Iter::Ns(ns.map.iter()),
-        }
+        };
+
+        iter::from_fn(move || {
+            match &mut export_iter {
+                Iter::Inst(iter) => iter.next(),
+                Iter::Ns(ns) => ns.next().map(|(name, export)| (&**name, export.clone())),
+            }
+        })
     }
 
     pub fn try_insert(&mut self, name: impl Into<String>, export: Export<'a>) -> Result<(), ()> {
