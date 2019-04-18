@@ -37,10 +37,6 @@ pub trait Compiler {
     unsafe fn from_cache(&self, cache: Artifact) -> Result<ModuleInner, CacheError>;
 }
 
-pub trait UserTrapper {
-    unsafe fn do_early_trap(&self, data: Box<dyn Any>) -> !;
-}
-
 pub trait RunnableModule: Send + Sync {
     /// This returns a pointer to the function designated by the `local_func_index`
     /// parameter.
@@ -55,7 +51,7 @@ pub trait RunnableModule: Send + Sync {
     /// signature and an invoke function that can call the trampoline.
     fn get_trampoline(&self, info: &ModuleInfo, sig_index: SigIndex) -> Option<Wasm>;
 
-    fn get_early_trapper(&self) -> Box<dyn UserTrapper>;
+    unsafe fn do_early_trap(&self, data: Box<dyn Any>) -> !;
 }
 
 pub trait CacheGen: Send + Sync {

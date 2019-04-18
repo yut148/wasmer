@@ -65,9 +65,9 @@ fn main() -> Result<(), error::Error> {
 
     let instance = module.instantiate(&imports)?;
 
-    let foo = instance.dyn_func("dbz")?;
+    let foo: Func<(), i32> = instance.func("dbz")?;
 
-    let result = foo.call(&[]);
+    let result = foo.call();
 
     println!("result: {:?}", result);
 

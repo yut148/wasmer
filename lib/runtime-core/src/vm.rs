@@ -22,7 +22,7 @@ pub struct Ctx<Data = ()> {
 
     local_backing: *mut LocalBacking,
     import_backing: *mut ImportBacking,
-    module: *const ModuleInner,
+    pub(crate) module: *const ModuleInner,
 
     pub data: Data,
 }
