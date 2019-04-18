@@ -9,7 +9,6 @@ edition = "2018"
 readme = "README.md"
 
 [dependencies]
-wasmer-singlepass-backend = { path = "../singlepass-backend", version = "0.3.0", optional = true }
 lazy_static = "1.2.0"
 memmap = "0.7.0"
 
@@ -17,9 +16,18 @@ memmap = "0.7.0"
 path = "../runtime-core"
 version = "0.3.0"
 
+[dependencies.wasmer-singlepass-backend]
+path = "../singlepass-backend"
+version = "0.3.0"
+optional = true
+
 [dependencies.wasmer-clif-backend]
 path = "../clif-backend"
 version = "0.3.0"
+optional = true
+
+[target.'cfg(not(windows))'.dependencies.wasmer-llvm-backend]
+path = "../llvm-backend"
 optional = true
 
 [dev-dependencies]
@@ -27,17 +35,12 @@ tempfile = "3.0.7"
 criterion = "0.2"
 wabt = "0.7.4"
 
-[target.'cfg(not(windows))'.dependencies.wasmer-llvm-backend]
-path = "../llvm-backend"
-optional = true
-
 [features]
-default = ["default-compiler"]
-default-compiler = ["wasmer-clif-backend"]
-cache = ["default-compiler"]
+default = ["backend:cranelift"]
 debug = ["wasmer-clif-backend/debug", "wasmer-runtime-core/debug"]
-llvm = ["wasmer-llvm-backend"]
-singlepass = ["wasmer-singlepass-backend"]
+"backend:llvm" = ["wasmer-llvm-backend"]
+"backend:cranelift" = ["wasmer-clif-backend"]
+"backend:singlepass" = ["wasmer-singlepass-backend"]
 
 [[bench]]
 name = "nginx"

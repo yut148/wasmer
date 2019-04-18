@@ -24,7 +24,7 @@ version = "0.3.0"
 
 [features]
 debug = ["wasmer-runtime/debug"]
-llvm = ["wasmer-runtime/llvm"]
+llvm = ["wasmer-runtime/backend:llvm"]
 
 [build-dependencies]
 cbindgen = "0.8"

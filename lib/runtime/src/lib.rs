@@ -85,7 +85,6 @@ pub use wasmer_runtime_core::types::Value;
 pub use wasmer_runtime_core::vm::Ctx;
 
 pub use wasmer_runtime_core::Func;
-pub use wasmer_runtime_core::{compile_with, validate};
 pub use wasmer_runtime_core::{func, imports};
 
 pub mod memory {
@@ -112,94 +111,78 @@ pub mod units {
 }
 
 pub mod backends;
-mod builder;
+pub mod builder;
 pub mod cache;
 
-use wasmer_runtime_core::{backend::Compiler, config::CompileConfig};
+use wasmer_runtime_core::config::CompileConfig;
+#[doc(inline)]
+pub use self::builder::Compiler;
 
-pub use self::builder::*;
-
-/// Compile WebAssembly binary code into a [`Module`].
-/// This function is useful if it is necessary to
-/// compile a module before it can be instantiated
-/// (otherwise, the [`instantiate`] function should be used).
-///
-/// [`Module`]: struct.Module.html
-/// [`instantiate`]: fn.instantiate.html
-///
-/// # Params:
-/// * `wasm`: A `&[u8]` containing the
-///   binary code of the wasm module you want to compile.
-/// # Errors:
-/// If the operation fails, the function returns `Err(error::CompileError::...)`.
-pub fn compile(wasm: &[u8]) -> error::CompileResult<Module> {
-    wasmer_runtime_core::compile_with(&wasm[..], default_compiler())
+pub mod config {
+    pub use super::builder::{Allowed, Metering};
 }
 
-/// The same as `compile` but takes a `CompilerConfig` for the purpose of
-/// changing the compiler's behavior
-pub fn compile_with_config(
-    wasm: &[u8],
-    compiler_config: CompileConfig,
-) -> error::CompileResult<Module> {
-    wasmer_runtime_core::compile_with_config(&wasm[..], default_compiler(), compiler_config)
-}
+// /// Compile WebAssembly binary code into a [`Module`].
+// /// This function is useful if it is necessary to
+// /// compile a module before it can be instantiated
+// /// (otherwise, the [`instantiate`] function should be used).
+// ///
+// /// [`Module`]: struct.Module.html
+// /// [`instantiate`]: fn.instantiate.html
+// ///
+// /// # Params:
+// /// * `wasm`: A `&[u8]` containing the
+// ///   binary code of the wasm module you want to compile.
+// /// # Errors:
+// /// If the operation fails, the function returns `Err(error::CompileError::...)`.
+// pub fn compile(wasm: &[u8]) -> error::CompileResult<Module> {
+//     wasmer_runtime_core::compile_with(&wasm[..], default_compiler())
+// }
 
-/// The same as `compile_with_config` but takes a `Compiler` for the purpose of
-/// changing the backend.
-pub fn compile_with_config_with(
-    wasm: &[u8],
-    compiler_config: CompileConfig,
-    compiler: &dyn Compiler,
-) -> error::CompileResult<Module> {
-    wasmer_runtime_core::compile_with_config(&wasm[..], compiler, compiler_config)
-}
+// /// The same as `compile` but takes a `CompilerConfig` for the purpose of
+// /// changing the compiler's behavior
+// pub fn compile_with_config(
+//     wasm: &[u8],
+//     compiler_config: CompileConfig,
+// ) -> error::CompileResult<Module> {
+//     wasmer_runtime_core::compile_with_config(&wasm[..], default_compiler(), compiler_config)
+// }
 
-/// Compile and instantiate WebAssembly code without
-/// creating a [`Module`].
-///
-/// [`Module`]: struct.Module.html
-///
-/// # Params:
-/// * `wasm`: A `&[u8]` containing the
-///   binary code of the wasm module you want to compile.
-/// * `import_object`: An object containing the values to be imported
-///   into the newly-created Instance, such as functions or
-///   Memory objects. There must be one matching property
-///   for each declared import of the compiled module or else a
-///   LinkError is thrown.
-/// # Errors:
-/// If the operation fails, the function returns a
-/// `error::CompileError`, `error::LinkError`, or
-/// `error::RuntimeError` (all combined into an `error::Error`),
-/// depending on the cause of the failure.
-pub fn instantiate<'imports, Data>(
-    wasm: &[u8],
-    import_object: &'imports ImportObject<Data>,
-) -> error::Result<Instance<'imports, Data>> {
-    let module = compile(wasm)?;
-    module.instantiate(import_object)
-}
+// /// The same as `compile_with_config` but takes a `Compiler` for the purpose of
+// /// changing the backend.
+// pub fn compile_with_config_with(
+//     wasm: &[u8],
+//     compiler_config: CompileConfig,
+//     compiler: &dyn Compiler,
+// ) -> error::CompileResult<Module> {
+//     wasmer_runtime_core::compile_with_config(&wasm[..], compiler, compiler_config)
+// }
 
-/// Get a single instance of the default compiler to use.
-pub fn default_compiler() -> &'static dyn Compiler {
-    use lazy_static::lazy_static;
-
-    #[cfg(feature = "llvm")]
-    use wasmer_llvm_backend::LLVMCompiler as DefaultCompiler;
-
-    #[cfg(feature = "singlepass")]
-    use wasmer_singlepass_backend::SinglePassCompiler as DefaultCompiler;
-
-    #[cfg(not(any(feature = "llvm", feature = "singlepass")))]
-    use wasmer_clif_backend::CraneliftCompiler as DefaultCompiler;
-
-    lazy_static! {
-        static ref DEFAULT_COMPILER: DefaultCompiler = { DefaultCompiler::new() };
-    }
-
-    &*DEFAULT_COMPILER as &dyn Compiler
-}
+// /// Compile and instantiate WebAssembly code without
+// /// creating a [`Module`].
+// ///
+// /// [`Module`]: struct.Module.html
+// ///
+// /// # Params:
+// /// * `wasm`: A `&[u8]` containing the
+// ///   binary code of the wasm module you want to compile.
+// /// * `import_object`: An object containing the values to be imported
+// ///   into the newly-created Instance, such as functions or
+// ///   Memory objects. There must be one matching property
+// ///   for each declared import of the compiled module or else a
+// ///   LinkError is thrown.
+// /// # Errors:
+// /// If the operation fails, the function returns a
+// /// `error::CompileError`, `error::LinkError`, or
+// /// `error::RuntimeError` (all combined into an `error::Error`),
+// /// depending on the cause of the failure.
+// pub fn instantiate<'imports, Data>(
+//     wasm: &[u8],
+//     import_object: &'imports ImportObject<Data>,
+// ) -> error::Result<Instance<'imports, Data>> {
+//     let module = compile(wasm)?;
+//     module.instantiate(import_object)
+// }
 
 /// The current version of this crate
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

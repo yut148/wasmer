@@ -16,7 +16,7 @@ use target_lexicon::Triple;
 
 use wasmer_runtime_core::cache::{Artifact, Error as CacheError};
 use wasmer_runtime_core::{
-    backend::{Compiler, Token},
+    backend::{Compiler},
     config::CompileConfig,
     error::{CompileError, CompileResult},
     module::ModuleInner,
@@ -44,7 +44,6 @@ impl Compiler for CraneliftCompiler {
         &self,
         wasm: &[u8],
         compiler_config: CompileConfig,
-        _: Token,
     ) -> CompileResult<ModuleInner> {
         validate(wasm)?;
 
@@ -60,7 +59,7 @@ impl Compiler for CraneliftCompiler {
 
     /// Create a wasmer Module from an already-compiled cache.
 
-    unsafe fn from_cache(&self, cache: Artifact, _: Token) -> Result<ModuleInner, CacheError> {
+    unsafe fn from_cache(&self, cache: Artifact) -> Result<ModuleInner, CacheError> {
         module::Module::from_cache(cache)
     }
 

@@ -69,7 +69,6 @@ pub fn compile_with(
     wasm: &[u8],
     compiler: &dyn backend::Compiler,
 ) -> CompileResult<module::Module> {
-    let token = backend::Token::generate();
 
     let metering = config::Metering::default();
     let allowed = config::Allowed::default();
@@ -79,7 +78,7 @@ pub fn compile_with(
         allowed: &allowed,
     };
 
-    compiler.compile(wasm, config, token).map(|mut inner| {
+    compiler.compile(wasm, config).map(|mut inner| {
         let inner_info: &mut crate::module::ModuleInfo = &mut inner.info;
         inner_info.import_custom_sections(wasm).unwrap();
         module::Module::new(Arc::new(inner))
@@ -93,9 +92,8 @@ pub fn compile_with_config(
     compiler: &dyn backend::Compiler,
     compiler_config: config::CompileConfig,
 ) -> CompileResult<module::Module> {
-    let token = backend::Token::generate();
     compiler
-        .compile(wasm, compiler_config, token)
+        .compile(wasm, compiler_config)
         .map(|inner| module::Module::new(Arc::new(inner)))
 }
 
@@ -124,9 +122,8 @@ pub unsafe fn load_cache_with(
     cache: Artifact,
     compiler: &dyn backend::Compiler,
 ) -> std::result::Result<module::Module, CacheError> {
-    let token = backend::Token::generate();
     compiler
-        .from_cache(cache, token)
+        .from_cache(cache)
         .map(|inner| module::Module::new(Arc::new(inner)))
 }
 

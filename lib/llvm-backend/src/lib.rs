@@ -1,7 +1,7 @@
 #![cfg_attr(nightly, feature(unwind_attributes))]
 
 use wasmer_runtime_core::{
-    backend::{Compiler, Token},
+    backend::{Compiler},
     cache::{Artifact, Error as CacheError},
     config::CompileConfig,
     error::CompileError,
@@ -32,7 +32,6 @@ impl Compiler for LLVMCompiler {
         &self,
         wasm: &[u8],
         compiler_config: CompileConfig,
-        _: Token,
     ) -> Result<ModuleInner, CompileError> {
         validate(wasm)?;
 
@@ -69,7 +68,7 @@ impl Compiler for LLVMCompiler {
         })
     }
 
-    unsafe fn from_cache(&self, _artifact: Artifact, _: Token) -> Result<ModuleInner, CacheError> {
+    unsafe fn from_cache(&self, _artifact: Artifact) -> Result<ModuleInner, CacheError> {
         unimplemented!("the llvm backend doesn't support caching yet")
     }
 }

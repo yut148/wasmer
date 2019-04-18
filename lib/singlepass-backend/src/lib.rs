@@ -28,7 +28,8 @@ mod protect_unix;
 use crate::codegen::{CodegenError, ModuleCodeGenerator};
 use crate::parse::LoadError;
 use wasmer_runtime_core::{
-    backend::{sys::Memory, Backend, CacheGen, Compiler, CompilerConfig, Token},
+    backend::{sys::Memory, Backend, CacheGen, Compiler},
+    config::CompileConfig,
     cache::{Artifact, Error as CacheError},
     error::{CompileError, CompileResult},
     module::{ModuleInfo, ModuleInner},
@@ -57,11 +58,10 @@ impl Compiler for SinglePassCompiler {
     fn compile(
         &self,
         wasm: &[u8],
-        compiler_config: CompilerConfig,
-        _: Token,
+        compile_config: CompileConfig,
     ) -> CompileResult<ModuleInner> {
         let mut mcg = codegen_x64::X64ModuleCodeGenerator::new();
-        let info = parse::read_module(wasm, Backend::Singlepass, &mut mcg, &compiler_config)?;
+        let info = parse::read_module(wasm, Backend::Singlepass, &mut mcg, compile_config)?;
         let exec_context = mcg.finalize(&info)?;
         Ok(ModuleInner {
             cache_gen: Box::new(Placeholder),
@@ -70,7 +70,7 @@ impl Compiler for SinglePassCompiler {
         })
     }
 
-    unsafe fn from_cache(&self, _artifact: Artifact, _: Token) -> Result<ModuleInner, CacheError> {
+    unsafe fn from_cache(&self, _artifact: Artifact) -> Result<ModuleInner, CacheError> {
         Err(CacheError::Unknown(
             "the singlepass backend doesn't support caching yet".to_string(),
         ))

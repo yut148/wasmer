@@ -1,4 +1,4 @@
-use wasmer_runtime::{compile, error, imports, Ctx, Func, Value};
+use wasmer_runtime::{Compiler, error, imports, Ctx, Func, Value, backends::Cranelift};
 
 use wabt::wat2wasm;
 
@@ -42,10 +42,6 @@ fn do_panic(ctx: &mut Ctx<usize>) -> Result<i32, String> {
 }
 
 fn main() -> Result<(), error::Error> {
-    let wasm = get_wasm();
-
-    let module = compile(&wasm)?;
-
     // let import_module = compile(&wat2wasm(WAT2).unwrap())?;
     // let import_instance = import_module.instantiate(&imports! {})?;
 
@@ -60,6 +56,12 @@ fn main() -> Result<(), error::Error> {
             "do_panic" => Func::new(do_panic),
         },
     };
+
+    let wasm = get_wasm();
+
+    let compiler: Compiler<Cranelift> = Compiler::new().build();
+
+    let module = compiler.module(&wasm).compile()?;
 
     let instance = module.instantiate(&imports)?;
 

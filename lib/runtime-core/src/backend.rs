@@ -30,25 +30,11 @@ pub enum Backend {
     LLVM,
 }
 
-/// This type cannot be constructed from
-/// outside the runtime crate.
-pub struct Token {
-    _private: (),
-}
-
-impl Token {
-    pub(crate) fn generate() -> Self {
-        Self { _private: () }
-    }
-}
-
 pub trait Compiler {
     /// Compiles a `Module` from WebAssembly binary format.
-    /// The `CompileToken` parameter ensures that this can only
-    /// be called from inside the runtime.
-    fn compile(&self, wasm: &[u8], config: CompileConfig, _: Token) -> CompileResult<ModuleInner>;
+    fn compile(&self, wasm: &[u8], config: CompileConfig) -> CompileResult<ModuleInner>;
 
-    unsafe fn from_cache(&self, cache: Artifact, _: Token) -> Result<ModuleInner, CacheError>;
+    unsafe fn from_cache(&self, cache: Artifact) -> Result<ModuleInner, CacheError>;
 }
 
 pub trait UserTrapper {
